@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#6ec8ee" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Blorps</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cellipse cx='32' cy='38' rx='22' ry='18' fill='%237adf4a'/%3E%3Ccircle cx='24' cy='32' r='5' fill='white'/%3E%3Ccircle cx='38' cy='32' r='5' fill='white'/%3E%3Ccircle cx='25' cy='33' r='2.4' fill='%231b2430'/%3E%3Ccircle cx='39' cy='33' r='2.4' fill='%231b2430'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="blob-a" class="sky-blob"></div>
+    <div id="blob-b" class="sky-blob"></div>
+
+    <div id="app">
+      <section id="lobby" class="overlay">
+        <div class="panel lobby-panel">
+          <p class="eyebrow">hex slime racing</p>
+          <h1>Blorps</h1>
+          <p class="lede">
+            Grow gooey, bounce around, and race to 10 slime points. Bigger is slower — don’t get too plump too soon.
+          </p>
+
+          <label class="field">
+            <span>Your name</span>
+            <input id="name" maxlength="14" placeholder="Pip" autocomplete="off" />
+          </label>
+
+          <div class="row-btns">
+            <button id="btn-create" class="btn primary" type="button">Create room</button>
+            <button id="btn-how" class="btn ghost" type="button">How to play</button>
+          </div>
+          <div class="row-btns">
+            <button id="btn-vs-1" class="btn" type="button">Play vs 1 bot</button>
+            <button id="btn-vs-2" class="btn" type="button">Play vs 2 bots</button>
+          </div>
+
+          <div class="join-row">
+            <input
+              id="code"
+              maxlength="6"
+              placeholder="ROOM"
+              spellcheck="false"
+              autocomplete="off"
+              class="code-input"
+            />
+            <button id="btn-join" class="btn" type="button">Join</button>
+          </div>
+
+          <label class="check">
+            <input id="spectator" type="checkbox" />
+            <span>Join as spectator (watch only)</span>
+          </label>
+        </div>
+      </section>
+
+      <section id="waiting" class="overlay hidden">
+        <div class="panel wait-panel">
+          <p class="eyebrow">room code</p>
+          <div class="code-hero">
+            <span id="wait-code">----</span>
+            <button id="btn-copy" class="btn tiny" type="button">Copy</button>
+          </div>
+          <p id="wait-role" class="muted"></p>
+          <ul id="wait-list" class="wait-list"></ul>
+          <div id="bot-row" class="bot-row hidden">
+            <span>Bots</span>
+            <button id="btn-bots-0" class="btn tiny" type="button">0</button>
+            <button id="btn-bots-1" class="btn tiny" type="button">1</button>
+            <button id="btn-bots-2" class="btn tiny" type="button">2</button>
+          </div>
+          <div class="row-btns">
+            <button id="btn-start" class="btn primary hidden" type="button">Start race</button>
+            <button id="btn-leave" class="btn ghost" type="button">Leave</button>
+          </div>
+          <p class="hint">Add 1 or 2 bots to race solo, or share the code with friends. 2–4 players total.</p>
+        </div>
+      </section>
+
+      <section id="hud" class="hud hidden">
+        <header class="hud-top">
+          <div class="chip room-chip">
+            <span>Room</span>
+            <strong id="hud-code"></strong>
+          </div>
+          <div class="turn-banner" id="turn-banner">
+            <span id="turn-text">Get ready</span>
+          </div>
+          <div class="chip">
+            <button id="btn-mute" class="icon-btn" type="button" aria-label="Mute">🔊</button>
+            <button id="btn-help" class="icon-btn" type="button" aria-label="Help">?</button>
+          </div>
+        </header>
+
+        <aside class="scoreboard" id="scoreboard"></aside>
+
+        <p class="ticker" id="ticker"></p>
+
+        <footer class="hud-bottom">
+          <div id="action-bar" class="action-bar hidden"></div>
+          <div id="dir-pad" class="dir-pad hidden"></div>
+          <button id="btn-end" class="btn end-btn hidden" type="button">End turn</button>
+        </footer>
+      </section>
+
+      <div id="modal" class="overlay hidden">
+        <div class="panel modal-panel" id="modal-body"></div>
+      </div>
+    </div>
+
+    <div id="toast"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
