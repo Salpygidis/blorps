@@ -186,11 +186,6 @@ export function makeBlorp(colorHex) {
   const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, 28, 20), mat);
   body.scale.y = 0.82;
   body.castShadow = true;
-  const shine = new THREE.Mesh(
-    new THREE.SphereGeometry(0.06, 12, 12),
-    new THREE.MeshStandardMaterial({ color: "#fff", roughness: 0.25 })
-  );
-  shine.position.set(0.16, 0.3, 0.06);
   const eyeWhite = new THREE.MeshStandardMaterial({ color: "#fff" });
   const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 12), eyeWhite);
   const eyeR = eyeL.clone();
@@ -209,9 +204,40 @@ export function makeBlorp(colorHex) {
   );
   smile.position.set(0, 0.02, 0.36);
   smile.rotation.set(Math.PI, 0, 0);
-  g.add(body, shine, eyeL, eyeR, smile);
-  g.userData = { body, eyeL, eyeR, colorHex, kind: "blorp" };
+  const hat = makeTopHat();
+  g.add(body, eyeL, eyeR, smile, hat);
+  g.userData = { body, eyeL, eyeR, colorHex, kind: "blorp", hat, hatTop: hat.userData.top };
   return g;
+}
+
+function makeTopHat() {
+  const hat = new THREE.Group();
+  const felt = new THREE.MeshStandardMaterial({
+    color: "#141414",
+    roughness: 0.68,
+    metalness: 0.04,
+  });
+  const bandMat = new THREE.MeshStandardMaterial({
+    color: "#0c0c0c",
+    roughness: 0.4,
+    metalness: 0.35,
+  });
+  const brimH = 0.03;
+  const brimY = 0.3;
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, brimH, 24), felt);
+  brim.position.y = brimY;
+  brim.castShadow = true;
+  const crownH = 0.34;
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.15, crownH, 20), felt);
+  crown.position.y = brimY + brimH / 2 + crownH / 2;
+  crown.castShadow = true;
+  const bandH = 0.045;
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.162, 0.162, bandH, 20), bandMat);
+  band.position.y = brimY + brimH / 2 + bandH / 2 + 0.006;
+  band.castShadow = true;
+  hat.add(brim, crown, band);
+  hat.userData.top = crown.position.y + crownH / 2;
+  return hat;
 }
 
 export function makeFruit(fruit) {

@@ -788,8 +788,9 @@ GameScene.prototype.placeMoveBadge = function placeMoveBadge() {
     paintMoveBadge(this.moveBadge, count);
   }
   this.moveBadge.visible = true;
-  const scale = mesh.scale.x || 1;
-  this.moveBadge.position.set(mesh.position.x, mesh.position.y + 0.5 * scale + 0.28, mesh.position.z);
+  const scaleY = mesh.scale.y || mesh.scale.x || 1;
+  const hatTop = mesh.userData.hatTop ?? 0.34;
+  this.moveBadge.position.set(mesh.position.x, mesh.position.y + hatTop * scaleY + 0.38, mesh.position.z);
 };
 
 function paintMoveBadge(sprite, count) {
