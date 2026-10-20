@@ -24,7 +24,7 @@ export class RoomManager {
     this.io = io;
     this.rooms = new Map();
     this.bySocket = new Map();
-    this.botDelayMs = Number(process.env.BOT_DELAY_MS || 650);
+    this.botDelayMs = Number(process.env.BOT_DELAY_MS || 2000);
   }
 
   makeCode() {
@@ -322,9 +322,7 @@ export class RoomManager {
     if (!room.game || room.game.status !== "playing") return;
     const cur = room.game.current();
     if (!cur?.isBot) return;
-    const first = room.game.phase === "move" && !room.game.movedThisTurn;
-    const ms = first ? this.botDelayMs + 200 : this.botDelayMs;
-    room.botTimer = setTimeout(() => this.runBot(room), ms);
+    room.botTimer = setTimeout(() => this.runBot(room), this.botDelayMs);
     room.botTimer.unref?.();
   }
 

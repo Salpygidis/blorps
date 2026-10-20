@@ -29,7 +29,7 @@
           <p class="eyebrow">hex slime racing</p>
           <h1>Blorps</h1>
           <p class="lede">
-            Grow gooey, bounce around, and race to 10 slime points. Bigger is slower — don’t get too plump too soon.
+            Race to 10 points. Your slimes, fruit, and cards sit in a tray so you can count them. Bigger slimes are slower.
           </p>
 
           <label class="field">
@@ -93,6 +93,8 @@
           <div class="chip room-chip">
             <span>Room</span>
             <strong id="hud-code"></strong>
+            <span class="deck-label" title="Cards left in the power-up deck">Deck</span>
+            <strong id="deck-count">0</strong>
           </div>
           <div class="turn-banner" id="turn-banner">
             <span id="turn-text">Get ready</span>
@@ -104,8 +106,9 @@
         </header>
 
         <aside class="scoreboard" id="scoreboard"></aside>
+        <aside id="inventory" class="inventory" aria-live="polite" aria-label="Your items"></aside>
 
-        <p class="ticker" id="ticker"></p>
+        <aside id="feed" class="feed" aria-live="polite" aria-label="Race history"></aside>
 
         <footer class="hud-bottom">
           <div id="action-bar" class="action-bar hidden"></div>
@@ -119,6 +122,7 @@
       </div>
     </div>
 
+    <div id="announce" aria-live="assertive"></div>
     <div id="toast"></div>
     <script type="module" src="/src/main.js"></script>
   </body>

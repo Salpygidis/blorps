@@ -1,4 +1,4 @@
-import { DIRS } from "../shared/hex.js";
+import { DIRS, onFaceLine } from "../shared/hex.js";
 import { socket, emit } from "./net.js";
 import { GameScene } from "./scene.js";
 import { sfx, setMuted, isMuted, unlockAudio } from "./audio.js";
@@ -137,6 +137,7 @@ socket.on("lobby", (lobby) => {
 
 socket.on("state", ({ lobby, state, events }) => {
   lastLobby = lobby;
+  keepStraightFaces(state);
   lastState = state;
   scene.setLocal(session.playerId);
   const me = {
@@ -223,7 +224,7 @@ function maybeModals(state, me) {
     const id = state.ui.card?.id + state.version;
     if (shownUpgrade !== id) {
       shownUpgrade = id;
-      showCard(state.ui.card);
+      showCard(state.ui.card, state.deckRemaining);
     }
     return;
   }
@@ -233,6 +234,19 @@ function maybeModals(state, me) {
     return;
   }
   if (state.status === "playing") shownWin = false;
+}
+
+/** Bounce and bop highlights must leave through one side and keep going. */
+function keepStraightFaces(state) {
+  if (!state || (state.phase !== "bounce" && state.phase !== "bop")) return;
+  const players = state.players || [];
+  let origin = players.find((p) => p.id === state.turnPlayerId);
+  if (state.phase === "bop" && state.ui?.otherId) {
+    origin = players.find((p) => p.id === state.ui.otherId) || origin;
+  }
+  if (!origin) return;
+  const range = state.ui?.range || 3;
+  state.legalHexes = (state.legalHexes || []).filter((h) => onFaceLine(origin, h, range));
 }
 
 function hexInDirection(dirIndex) {

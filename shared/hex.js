@@ -84,3 +84,41 @@ export function ring(radius) {
 export function sameHex(a, b) {
   return a.q === b.q && a.r === b.r;
 }
+
+/**
+ * A straight step leaves through one flat side and keeps going out the
+ * opposite side of each hex. A path that turns, such as one step east and
+ * then a step to the side, is not on a face line.
+ * Returns { q, r, dist } for the face direction, or null.
+ */
+export function faceStep(from, to) {
+  const dq = Number(to.q) - Number(from.q);
+  const dr = Number(to.r) - Number(from.r);
+  for (const d of DIRS) {
+    const dist = d.q !== 0 ? dq / d.q : dr / d.r;
+    if (dist < 1 || dist !== Math.trunc(dist)) continue;
+    if (d.q * dist === dq && d.r * dist === dr) return { q: d.q, r: d.r, dist };
+  }
+  return null;
+}
+
+export function onFaceLine(from, to, maxDist = Infinity) {
+  const step = faceStep(from, to);
+  return !!step && step.dist <= maxDist;
+}
+
+/** True when every hex has the same axial cell, terrain, and elevation. */
+export function sameHexLayout(current, next) {
+  const a = [...current];
+  const b = [...next];
+  if (a.length !== b.length) return false;
+  const by = new Map();
+  for (const h of a) by.set(key(h.q, h.r), h);
+  for (const h of b) {
+    const prev = by.get(key(h.q, h.r));
+    if (!prev) return false;
+    if ((prev.terrain || "open") !== (h.terrain || "open")) return false;
+    if ((prev.elevation ?? 0) !== (h.elevation ?? 0)) return false;
+  }
+  return true;
+}

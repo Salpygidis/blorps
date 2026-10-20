@@ -1,5 +1,39 @@
 import * as THREE from "three";
 import { HEX_SIZE } from "../shared/hex.js";
+import { capScaleFor, foundationPose } from "../shared/boardFit.js";
+
+let kit = null;
+
+export function useBoardModels(models) {
+  kit = models;
+  if (!kit.pickerGeo) {
+    const geo = new THREE.ExtrudeGeometry(hexShape(HEX_SIZE * 0.9), {
+      depth: 0.04,
+      bevelEnabled: false,
+    });
+    geo.rotateX(-Math.PI / 2);
+    kit.pickerGeo = geo;
+    kit.pickerMat = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    });
+  }
+}
+
+export function layoutBoard(hexes) {
+  if (!kit || !hexes?.length) return null;
+  const layout = foundationPose();
+  kit.layout = layout;
+  kit.capScale = capScaleFor(kit.pieceMaxX);
+  kit.groundTop = kit.foundationSize.height * layout.scale;
+  // Piece meshes are built with their base at local y=0. y=0 is the bottom
+  // of the foundation, so the water and hills rest on that base.
+  kit.grooveY = 0;
+  kit.waterTop = kit.liquidHeight * kit.capScale;
+  kit.hillTop = kit.heightHeight * kit.capScale;
+  return layout;
+}
 
 export function hexShape(size = HEX_SIZE * 0.92) {
   const shape = new THREE.Shape();
@@ -15,6 +49,11 @@ export function hexShape(size = HEX_SIZE * 0.92) {
 }
 
 export function tileDepth(hex) {
+  if (kit?.groundTop) {
+    if (hex.terrain === "water") return kit.waterTop;
+    if ((hex.elevation || 0) > 0) return kit.hillTop;
+    return kit.groundTop;
+  }
   if (hex.terrain === "water" || hex.elevation < 0) return 0.16;
   return 0.26 + Math.max(0, hex.elevation) * 0.42;
 }
@@ -22,11 +61,52 @@ export function tileDepth(hex) {
 export function tileColor(hex) {
   if (hex.terrain === "water") return "#3db8d9";
   if (hex.terrain === "tree") return "#5aa34e";
-  if (hex.elevation > 0) return "#d2b48c";
+  if (hex.elevation > 0) return "#a97449";
   return "#6fbf63";
 }
 
 export function makeTile(hex) {
+  if (kit?.foundation) return makeModelTile(hex);
+  return makePrismTile(hex);
+}
+
+function makeModelTile(hex) {
+  const depth = tileDepth(hex);
+  const group = new THREE.Group();
+  group.userData = {
+    kind: "hex",
+    q: hex.q,
+    r: hex.r,
+    depth,
+    terrain: hex.terrain || "open",
+  };
+  const picker = new THREE.Mesh(kit.pickerGeo, kit.pickerMat);
+  picker.position.y = depth;
+  group.add(picker);
+  if (hex.terrain === "water") {
+    const water = new THREE.Mesh(kit.liquid, kit.liquidMat);
+    water.scale.setScalar(kit.capScale);
+    water.position.y = kit.grooveY;
+    water.receiveShadow = true;
+    group.add(water);
+  } else if ((hex.elevation || 0) > 0) {
+    const rise = new THREE.Mesh(kit.height, kit.heightMat);
+    rise.scale.setScalar(kit.capScale);
+    rise.position.y = kit.grooveY;
+    rise.castShadow = true;
+    rise.receiveShadow = true;
+    group.add(rise);
+  }
+  if (hex.terrain === "tree") {
+    const tree = makeTree();
+    // Bite the trunk a hair into the rim so the base meets the plate.
+    tree.position.y = depth - 0.015;
+    group.add(tree);
+  }
+  return group;
+}
+
+function makePrismTile(hex) {
   const depth = tileDepth(hex);
   const geo = new THREE.ExtrudeGeometry(hexShape(), {
     depth,
@@ -46,8 +126,12 @@ export function makeTile(hex) {
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.castShadow = true;
-  mesh.userData = { kind: "hex", q: hex.q, r: hex.r, depth };
-  if (hex.terrain === "tree") mesh.add(makeTree());
+  mesh.userData = { kind: "hex", q: hex.q, r: hex.r, depth, terrain: hex.terrain || "open" };
+  if (hex.terrain === "tree") {
+    const tree = makeTree();
+    tree.position.y = depth;
+    mesh.add(tree);
+  }
   if (hex.terrain === "water") {
     const water = new THREE.Mesh(
       new THREE.CircleGeometry(HEX_SIZE * 0.72, 6),
@@ -69,23 +153,24 @@ export function makeTile(hex) {
 
 function makeTree() {
   const g = new THREE.Group();
+  const trunkH = 0.34;
   const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.07, 0.1, 0.34, 6),
+    new THREE.CylinderGeometry(0.07, 0.1, trunkH, 6),
     new THREE.MeshStandardMaterial({ color: "#8a5a32", flatShading: true })
   );
-  trunk.position.y = 0.4;
+  // Cylinder is centered, so half the height puts the base on the parent's y.
+  trunk.position.y = trunkH / 2;
   trunk.castShadow = true;
   const leaf = new THREE.Mesh(
     new THREE.ConeGeometry(0.38, 0.7, 7),
     new THREE.MeshStandardMaterial({ color: "#2f8f4a", flatShading: true })
   );
-  leaf.position.y = 0.78;
+  leaf.position.y = 0.55;
   leaf.castShadow = true;
   const leaf2 = leaf.clone();
-  leaf2.position.y = 1.05;
+  leaf2.position.y = 0.82;
   leaf2.scale.setScalar(0.72);
   g.add(trunk, leaf, leaf2);
-  g.position.y = 0.02;
   return g;
 }
 

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { hexToWorld, key, DIRS } from "../shared/hex.js";
+import { hexToWorld, hexLine, key, DIRS, sameHexLayout } from "../shared/hex.js";
 import {
   makeTile,
   makeBlorp,
@@ -8,8 +8,14 @@ import {
   makeCapture,
   makeHighlight,
   tileDepth,
+  useBoardModels,
+  layoutBoard,
 } from "./meshes.js";
+import { loadBoardModels } from "./boardModels.js";
 import { tween, lerp, easeInOut } from "./tweens.js";
+import { hopLookPoint } from "./cameraFollow.js";
+import { describeResults } from "./results.js";
+import { announceFreeBounce, showResults } from "./ui.js";
 import { sfx } from "./audio.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -26,6 +32,11 @@ export class GameScene {
     this.captures = new Map();
     this.highlights = [];
     this.animating = false;
+    this.hopTracking = false;
+    this.epoch = 0;
+    this.models = null;
+    this.modelsReady = false;
+    this.pendingApply = null;
     this.queue = Promise.resolve();
     this.target = new THREE.Vector3();
     this.look = new THREE.Vector3();
@@ -59,12 +70,32 @@ export class GameScene {
     this.clock = new THREE.Clock();
     this.buildLights();
     this.buildGround();
-    this.buildLobbyIsland();
+    this.mode = "lobby";
     this.bindInput();
     this.resize();
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
     window.addEventListener("resize", () => this.resize());
+    this.loadBoard();
+  }
+
+  loadBoard() {
+    loadBoardModels()
+      .then((models) => {
+        useBoardModels(models);
+        this.models = models;
+      })
+      .catch((err) => {
+        console.warn("Board models unavailable, using simple tiles.", err);
+        this.models = null;
+      })
+      .finally(() => {
+        this.modelsReady = true;
+        const pending = this.pendingApply;
+        this.pendingApply = null;
+        if (pending) this.applyState(pending.state, pending.events);
+        else this.buildLobbyIsland();
+      });
   }
 
   isMobile() {
@@ -95,6 +126,7 @@ export class GameScene {
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.08;
     ground.receiveShadow = true;
+    this.ground = ground;
     this.scene.add(ground);
   }
 
@@ -109,6 +141,8 @@ export class GameScene {
       { q: 0, r: -1, terrain: "open", elevation: 0 },
       { q: 1, r: -1, terrain: "open", elevation: 0 },
     ];
+    if (this.models) layoutBoard(demo);
+    this.addFoundation();
     for (const h of demo) this.addHex(h);
     const a = makeBlorp("#7adf4a");
     const b = makeBlorp("#ff6b9d");
@@ -131,12 +165,32 @@ export class GameScene {
   }
 
   clearBoard() {
-    for (const map of [this.hexes, this.blorps, this.fruits, this.tokens, this.captures]) {
-      for (const obj of map.values()) this.scene.remove(obj);
-      map.clear();
+    const keep = new Set([this.ground, this.sun, this.moveBadge].filter(Boolean));
+    for (const child of [...this.scene.children]) {
+      if (keep.has(child) || child.isLight) continue;
+      this.scene.remove(child);
     }
-    for (const h of this.highlights) this.scene.remove(h);
+    this.hexes.clear();
+    this.blorps.clear();
+    this.fruits.clear();
+    this.tokens.clear();
+    this.captures.clear();
     this.highlights = [];
+  }
+
+  addFoundation() {
+    const layout = this.models?.layout;
+    if (!layout) return;
+    // Pose measured in boardFit: +30° yaw turns the plate's flat-top hexes
+    // into the game's pointy-top grid, at the same centers as hexToWorld.
+    const base = new THREE.Mesh(this.models.foundation, this.models.foundationMat);
+    base.rotation.y = layout.yaw;
+    base.scale.setScalar(layout.scale);
+    base.position.set(layout.x, 0, layout.z);
+    base.receiveShadow = true;
+    base.castShadow = false;
+    base.userData.kind = "foundation";
+    this.scene.add(base);
   }
 
   addHex(hex) {
@@ -167,41 +221,105 @@ export class GameScene {
     obj.position.set(x, depth + extra, z);
   }
 
+  placeCollectible(obj, q, r, extra) {
+    const hex = this.hexRecord(q, r)?.hex;
+    obj.userData.kind = "collectible";
+    obj.userData.q = q;
+    obj.userData.r = r;
+    const onTree = hex?.terrain === "tree";
+    obj.visible = !onTree;
+    if (onTree) return;
+    this.placeOnHex(obj, q, r, hex, extra);
+  }
+
   setLocal(id) {
     this.localId = id;
   }
 
   applyState(state, events = []) {
     if (!state || state.status === "lobby") return;
+    if (!this.modelsReady) {
+      this.pendingApply = { state, events };
+      return;
+    }
+    const previous = this.state;
+    if (previous && (state.roomCode !== previous.roomCode || state.version < previous.version)) {
+      this.epoch++;
+      this.queue = Promise.resolve();
+      this.animating = false;
+      this.hopTracking = false;
+    }
     if (this.mode !== "play" || !this.boardMatches(state)) {
       this.rebuild(state);
     }
     this.state = state;
+    this.syncCollectibles(state);
+    this.syncHighlights(state);
     if (events?.length && this.mode === "play") {
       this.enqueue(() => this.playEvents(events, state));
     } else {
       this.syncEntities(state);
-      this.syncHighlights(state);
       this.follow(state, true);
     }
   }
 
   boardMatches(state) {
-    if (this.hexes.size !== (state.hexes?.length || 0)) return false;
-    return true;
+    const current = [...this.hexes.values()].map((rec) => rec.hex);
+    return sameHexLayout(current, state.hexes || []);
   }
 
   rebuild(state) {
+    if (!this.modelsReady) {
+      this.pendingApply = { state, events: [] };
+      return;
+    }
+    if (this.models) layoutBoard(state.hexes);
+    this.epoch++;
     this.clearBoard();
     this.mode = "play";
+    this.addFoundation();
     for (const h of state.hexes) this.addHex(h);
     this.syncEntities(state, true);
     this.spherical = { theta: 0.55, phi: 0.9, r: this.isMobile() ? 18 : 15 };
     this.follow(state, true);
   }
 
+  syncCollectibles(state) {
+    if (!state) return;
+    this.syncMap(this.fruits, state.fruits || [], (f) => {
+      const m = makeFruit(f);
+      this.scene.add(m);
+      return m;
+    }, (m, f) => {
+      this.placeCollectible(m, f.q, f.r, 0.22);
+    });
+
+    this.syncMap(this.tokens, state.slimes || [], (t) => {
+      const m = makeToken(t.color);
+      this.scene.add(m);
+      return m;
+    }, (m, t) => {
+      this.placeCollectible(m, t.q, t.r, 0.12);
+    });
+
+    this.syncMap(this.captures, state.captures || [], () => {
+      const m = makeCapture();
+      this.scene.add(m);
+      return m;
+    }, (m, c) => {
+      this.placeCollectible(m, c.q, c.r, 0.02);
+      const spent = (c.claimedBy || []).includes(this.localId);
+      m.userData.spent = spent;
+      const crystal = m.userData.crystal;
+      if (crystal?.material) {
+        crystal.material.opacity = spent ? 0.28 : 0.92;
+        crystal.material.emissiveIntensity = spent ? 0.05 : 0.5;
+      }
+    });
+  }
+
   syncEntities(state, snap = false) {
-    this.syncMap(this.blorps, state.players.filter((p) => !p.isSpectator), (p) => {
+    this.syncMap(this.blorps, (state.players || []).filter((p) => !p.isSpectator), (p) => {
       const m = makeBlorp(p.color.hex);
       this.scene.add(m);
       return m;
@@ -214,37 +332,14 @@ export class GameScene {
       m.userData.baseY = m.position.y;
       offsetStack(m, p, state.players);
     });
-
-    this.syncMap(this.fruits, state.fruits, (f) => {
-      const m = makeFruit(f);
-      this.scene.add(m);
-      return m;
-    }, (m, f) => {
-      this.placeOnHex(m, f.q, f.r, this.hexRecord(f.q, f.r)?.hex, 0.22);
-    });
-
-    this.syncMap(this.tokens, state.slimes, (t) => {
-      const m = makeToken(t.color);
-      this.scene.add(m);
-      return m;
-    }, (m, t) => {
-      this.placeOnHex(m, t.q, t.r, this.hexRecord(t.q, t.r)?.hex, 0.12);
-    });
-
-    this.syncMap(this.captures, state.captures, () => {
-      const m = makeCapture();
-      this.scene.add(m);
-      return m;
-    }, (m, c) => {
-      this.placeOnHex(m, c.q, c.r, this.hexRecord(c.q, c.r)?.hex, 0.02);
-    });
+    this.syncCollectibles(state);
     void snap;
   }
 
   syncMap(map, list, create, update) {
     const seen = new Set();
-    for (const item of list) {
-      const id = item.id;
+    for (const item of list || []) {
+      const id = item.id ?? `${item.q},${item.r}`;
       seen.add(id);
       let m = map.get(id);
       if (!m) {
@@ -253,9 +348,9 @@ export class GameScene {
       }
       update(m, item);
     }
-    for (const [id, m] of map) {
+    for (const [id, m] of [...map]) {
       if (!seen.has(id)) {
-        this.scene.remove(m);
+        m.parent?.remove(m);
         map.delete(id);
       }
     }
@@ -278,30 +373,48 @@ export class GameScene {
   }
 
   async playEvents(events, state) {
+    const epoch = this.epoch;
     this.animating = true;
-    for (const ev of events) {
-      if (ev.type === "hop") await this.animHop(ev);
-      else if (ev.type === "absorbFruit" || ev.type === "absorbSlime") {
-        sfx("slurp");
-        await this.pulse(ev.playerId);
-      } else if (ev.type === "bop") {
-        sfx("bop");
-        await this.animHop({
-          playerId: ev.targetId,
-          from: ev.from,
-          to: ev.to,
-          kind: "bop",
-        });
-      } else if (ev.type === "win") sfx("win");
-      else if (ev.type === "capture") sfx("card");
-      else if (ev.type === "drop") {
-        /* tokens sync at end */
+    try {
+      const lines = describeResults(events, state.players || []);
+      if (lines.length) showResults(lines);
+      for (const ev of events) {
+        if (this.epoch !== epoch) return;
+        if (ev.type === "hop") await this.animHop(ev);
+        else if (ev.type === "absorbFruit" || ev.type === "absorbSlime") {
+          this.syncCollectibles(this.state?.version >= state.version ? this.state : state);
+          sfx("slurp");
+          await this.pulse(ev.playerId);
+        } else if (ev.type === "bop") {
+          sfx("bop");
+          await this.animHop({
+            playerId: ev.targetId,
+            from: ev.from,
+            to: ev.to,
+            kind: "bop",
+          });
+        } else if (ev.type === "win") sfx("win");
+        else if (ev.type === "capture") sfx("card");
+        else if (ev.type === "freeBounce") {
+          const who = (state.players || []).find((p) => p.id === ev.playerId);
+          announceFreeBounce(who?.name || "Someone", ev);
+        } else if (ev.type === "drop") {
+          this.syncCollectibles(this.state?.version >= state.version ? this.state : state);
+        }
       }
+    } finally {
+      if (this.epoch !== epoch) return;
+      const newer = this.state && (this.state.version ?? 0) > (state.version ?? 0);
+      const latest = newer ? this.state : state;
+      if (!newer) {
+        this.syncEntities(latest);
+        this.follow(latest, false);
+      } else {
+        this.syncCollectibles(latest);
+      }
+      this.syncHighlights(latest);
+      this.animating = false;
     }
-    this.syncEntities(state);
-    this.syncHighlights(state);
-    this.follow(state, false);
-    this.animating = false;
   }
 
   async animHop(ev) {
@@ -313,20 +426,36 @@ export class GameScene {
     const y0 = this.topY(ev.from.q, ev.from.r) + 0.28;
     const y1 = this.topY(ev.to.q, ev.to.r) + 0.28;
     mesh.userData.idle = false;
-    await tween({
-      duration: ev.kind === "bop" ? 380 : 300,
-      ease: easeInOut,
-      onUpdate: (t) => {
-        mesh.position.x = lerp(from.x, to.x, t);
-        mesh.position.z = lerp(from.z, to.z, t);
-        const arc = Math.sin(t * Math.PI) * (ev.kind === "bop" ? 1.1 : 0.55);
-        mesh.position.y = lerp(y0, y1, t) + arc;
-        mesh.scale.y = blorpScale(3) * (1 - Math.sin(t * Math.PI) * 0.12);
-      },
-    });
+    const crossesTree =
+      ev.from &&
+      ev.to &&
+      hexLine(ev.from, ev.to)
+        .slice(1, -1)
+        .some((h) => this.hexRecord(h.q, h.r)?.hex?.terrain === "tree");
+    const arcHeight = ev.kind === "bop" ? 1.1 : crossesTree ? 1.8 : 0.55;
+    this.hopTracking = true;
+    try {
+      await tween({
+        duration: ev.kind === "bop" ? 380 : 300,
+        ease: easeInOut,
+        onUpdate: (t) => {
+          mesh.position.x = lerp(from.x, to.x, t);
+          mesh.position.z = lerp(from.z, to.z, t);
+          const arc = Math.sin(t * Math.PI) * arcHeight;
+          mesh.position.y = lerp(y0, y1, t) + arc;
+          mesh.scale.y = blorpScale(3) * (1 - Math.sin(t * Math.PI) * 0.12);
+          const look = hopLookPoint(from, to, t, arcHeight);
+          this.look.set(look.x, look.y, look.z);
+          this.target.copy(this.look);
+        },
+      });
+    } finally {
+      this.hopTracking = false;
+      this.look.set(to.x, 0, to.z);
+      this.target.copy(this.look);
+    }
     mesh.userData.idle = true;
     mesh.userData.baseY = mesh.position.y;
-    this.look.lerp(new THREE.Vector3(to.x, 0, to.z), 0.6);
   }
 
   async pulse(playerId) {
@@ -407,15 +536,30 @@ export class GameScene {
   }
 
   pick(cx, cy) {
-    if (this.animating || !this.onHex) return;
+    if (!this.onHex) return;
     const rect = this.canvas.getBoundingClientRect();
     this.pointer.x = ((cx - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((cy - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const tiles = [...this.hexes.values()].map((h) => h.mesh);
-    const hits = this.raycaster.intersectObjects(tiles, false);
+    const stuff = [
+      ...tiles,
+      ...this.fruits.values(),
+      ...this.tokens.values(),
+      ...this.captures.values(),
+    ];
+    const hits = this.raycaster.intersectObjects(stuff, true);
     if (!hits.length) return;
-    const { q, r } = hits[0].object.userData;
+    const collectible = collectibleOf(hits[0].object);
+    if (collectible) {
+      const { q, r } = collectible.userData;
+      if (this.hexRecord(q, r)?.hex?.terrain === "tree") return;
+      this.onHex(q, r);
+      return;
+    }
+    const tile = hexTileOf(hits[0].object);
+    if (!tile || tile.userData.terrain === "tree") return;
+    const { q, r } = tile.userData;
     this.onHex(q, r);
   }
 
@@ -442,7 +586,7 @@ export class GameScene {
   }
 
   updateCamera() {
-    this.look.lerp(this.target, 0.08);
+    if (!this.hopTracking) this.look.lerp(this.target, 0.08);
     if (this.mode === "lobby") this.spherical.theta += 0.0018;
     const { theta, phi, r } = this.spherical;
     const x = this.look.x + r * Math.sin(phi) * Math.sin(theta);
@@ -471,15 +615,36 @@ export class GameScene {
       }
     }
     for (const cap of this.captures.values()) {
-      if (cap.userData.crystal) cap.userData.crystal.rotation.y = t * 0.9;
+      if (cap.userData.crystal) {
+        cap.userData.crystal.rotation.y = t * (cap.userData.spent ? 0.2 : 0.9);
+      }
     }
     for (const [i, h] of this.highlights.entries()) {
       h.position.y += Math.sin(t * 4 + i) * 0.0008;
       h.material.opacity = 0.55 + Math.sin(t * 5 + i) * 0.25;
     }
+    this.placeMoveBadge();
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(this.loop);
   }
+}
+
+function collectibleOf(obj) {
+  let cur = obj;
+  while (cur) {
+    if (cur.userData?.kind === "collectible") return cur;
+    cur = cur.parent;
+  }
+  return null;
+}
+
+function hexTileOf(obj) {
+  let cur = obj;
+  while (cur) {
+    if (cur.userData?.kind === "hex") return cur;
+    cur = cur.parent;
+  }
+  return null;
 }
 
 function blorpScale(slime) {
@@ -500,6 +665,62 @@ function offsetStack(mesh, player, all) {
 
 function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
+}
+
+GameScene.prototype.placeMoveBadge = function placeMoveBadge() {
+  const state = this.state;
+  const show =
+    this.mode === "play" &&
+    state?.status === "playing" &&
+    state.phase === "move" &&
+    state.turnPlayerId;
+  const mesh = show ? this.blorps.get(state.turnPlayerId) : null;
+  if (!mesh) {
+    if (this.moveBadge) this.moveBadge.visible = false;
+    return;
+  }
+  const count = state.remainingMove ?? 0;
+  if (!this.moveBadge) {
+    this.moveBadge = makeMoveBadge(count);
+    this.scene.add(this.moveBadge);
+  } else if (this.moveBadge.userData.count !== count) {
+    paintMoveBadge(this.moveBadge, count);
+  }
+  this.moveBadge.visible = true;
+  const scale = mesh.scale.x || 1;
+  this.moveBadge.position.set(mesh.position.x, mesh.position.y + 0.5 * scale + 0.28, mesh.position.z);
+};
+
+function paintMoveBadge(sprite, count) {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 128;
+  const g = c.getContext("2d");
+  g.beginPath();
+  g.arc(64, 64, 50, 0, Math.PI * 2);
+  g.fillStyle = "#fffdf6";
+  g.fill();
+  g.lineWidth = 8;
+  g.strokeStyle = "#1b2a38";
+  g.stroke();
+  g.fillStyle = "#1b2a38";
+  g.font = "700 72px Fredoka, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(String(count), 64, 68);
+  const tex = new THREE.CanvasTexture(c);
+  if (sprite.material.map) sprite.material.map.dispose();
+  sprite.material.map = tex;
+  sprite.userData.count = count;
+}
+
+function makeMoveBadge(count) {
+  const mat = new THREE.SpriteMaterial({ transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(0.58, 0.58, 1);
+  sprite.renderOrder = 10;
+  paintMoveBadge(sprite, count);
+  return sprite;
 }
 
 function makeLabel(text) {

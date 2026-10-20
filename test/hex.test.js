@@ -8,6 +8,10 @@ import {
   ring,
   hexLine,
   key,
+  sameHexLayout,
+  DIRS,
+  faceStep,
+  onFaceLine,
 } from "../shared/hex.js";
 import { buildBoard, hexCount } from "../server/map.js";
 import { mulberry32 } from "../shared/rng.js";
@@ -17,12 +21,47 @@ describe("hex math", () => {
     assert.equal(ring(3).length, 37);
   });
 
-  it("builds an island of 39 hexes", () => {
+  it("builds an island of full hexes only", () => {
     const board = buildBoard(3, mulberry32(42));
-    assert.equal(hexCount(board.hexes), 39);
+    assert.equal(hexCount(board.hexes), 35);
     assert.equal(board.starts.length, 3);
     assert.equal(board.captures.length, 3);
     assert.equal(board.fruits.length, 8);
+    for (const [q, r] of [
+      [0, -3],
+      [0, 3],
+      [4, -2],
+      [-4, 2],
+    ]) {
+      assert.equal(board.hexes[key(q, r)], undefined);
+    }
+    for (const s of board.starts) {
+      assert.ok(board.hexes[key(s.q, s.r)], `${s.q},${s.r} is a start`);
+    }
+  });
+
+  it("treats one hex side as a straight line", () => {
+    const origin = { q: 0, r: 0 };
+    for (const d of DIRS) {
+      const step = faceStep(origin, { q: d.q * 2, r: d.r * 2 });
+      assert.deepEqual(step, { q: d.q, r: d.r, dist: 2 });
+      const a = hexToWorld(d.q, d.r);
+      const b = hexToWorld(d.q * 2, d.r * 2);
+      const cross = a.x * b.z - a.z * b.x;
+      assert.ok(Math.abs(cross) < 1e-9);
+    }
+    // One step east, then a turn. These are the six bends at distance 2.
+    for (const [q, r] of [
+      [2, -1],
+      [1, -2],
+      [-1, -1],
+      [-2, 1],
+      [-1, 2],
+      [1, 1],
+    ]) {
+      assert.equal(faceStep(origin, { q, r }), null);
+      assert.equal(onFaceLine(origin, { q, r }, 2), false);
+    }
   });
 
   it("neighbor distance is 1", () => {
@@ -46,6 +85,32 @@ describe("hex math", () => {
     const line = hexLine({ q: 0, r: 0 }, { q: 2, r: 0 });
     assert.equal(line.length, 3);
     assert.equal(key(line[1].q, line[1].r), "1,0");
+  });
+
+  it("never places fruit or crystals on a tree", () => {
+    for (const players of [2, 3, 4]) {
+      for (let seed = 1; seed <= 80; seed++) {
+        const board = buildBoard(players, mulberry32(seed));
+        const trees = new Set(
+          Object.values(board.hexes)
+            .filter((h) => h.terrain === "tree")
+            .map((h) => key(h.q, h.r))
+        );
+        for (const item of [...board.fruits, ...board.captures]) {
+          const cell = board.hexes[key(item.q, item.r)];
+          assert.ok(cell, `${item.id} is on the board`);
+          assert.equal(cell.terrain, "open", `${item.id} on ${cell.terrain}`);
+          assert.equal(trees.has(key(item.q, item.r)), false);
+        }
+      }
+    }
+  });
+
+  it("treats a changed tree as a different board", () => {
+    const tree = [{ q: 1, r: 0, terrain: "tree", elevation: 0 }];
+    const open = [{ q: 1, r: 0, terrain: "open", elevation: 0 }];
+    assert.equal(sameHexLayout(tree, tree), true);
+    assert.equal(sameHexLayout(tree, open), false);
   });
 
   it("keeps a walkable neighbor at every start", () => {

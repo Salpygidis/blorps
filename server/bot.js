@@ -1,5 +1,4 @@
 import { distance } from "../shared/hex.js";
-import { hasUpgrade } from "../shared/upgrades.js";
 
 export const BOT_NAMES = ["Beep", "Blip"];
 
@@ -64,20 +63,6 @@ function scoreHex(game, p, h, phase) {
   if (cap && !cap.claimedBy.includes(p.id)) s += 26;
   const other = game.occupant(h.q, h.r, p.id);
   if (other) s += other.slime > 1 ? 20 : 5;
-
-  if (phase === "bounce") {
-    const path = game.pathTo(
-      p,
-      h,
-      game.bounceRange(p),
-      hasUpgrade(p, "treehopper")
-    );
-    for (const step of path) {
-      const f = game.fruitAt(step.q, step.r);
-      if (f) s += 16 + f.value * 8;
-      if (game.slimeAt(step.q, step.r)) s += 10;
-    }
-  }
 
   if (phase === "bop") {
     const victim = game.playerById(game.phaseData.otherId);

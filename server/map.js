@@ -10,7 +10,7 @@ const STARTS = {
   3: [
     { q: 3, r: -3 },
     { q: -3, r: 0 },
-    { q: 0, r: 3 },
+    { q: -1, r: 3 },
   ],
   4: [
     { q: 3, r: -3 },
@@ -24,9 +24,21 @@ export function startSpots(playerCount) {
   return STARTS[playerCount] || STARTS[2];
 }
 
+/**
+ * The foundation plate only covers about a third of these cells, so a slime
+ * would stand on a hex the mesh cuts in half. They are not spaces.
+ * Measured on public/models/foundation.obj after foundationPose().
+ */
+const CLIPPED_EDGES = [
+  { q: 0, r: -3 },
+  { q: 0, r: 3 },
+  { q: 4, r: -2 },
+  { q: -4, r: 2 },
+];
+
 export function buildBoard(playerCount, rand) {
-  const cells = ring(3);
-  cells.push({ q: 4, r: -2 }, { q: -4, r: 2 });
+  const clipped = new Set(CLIPPED_EDGES.map((h) => key(h.q, h.r)));
+  const cells = ring(3).filter((h) => !clipped.has(key(h.q, h.r)));
 
   const map = {};
   for (const h of cells) {
@@ -89,6 +101,8 @@ export function buildBoard(playerCount, rand) {
     }
   }
 
+  // Fruit and crystals only sit on open ground. A tree hex never holds one.
+  const blocked = new Set();
   const fruitTypes = [
     "apple",
     "apple",
@@ -99,10 +113,7 @@ export function buildBoard(playerCount, rand) {
     "grapes",
     "grapes",
   ];
-  const fruitKeys = pickFree(
-    fruitTypes.length,
-    (c, k) => c.terrain === "open" && !startKeys.has(k)
-  );
+  const fruitKeys = takeClearings(map, startKeys, blocked, fruitTypes.length, rand);
   const fruits = fruitKeys.map((k, i) => {
     const type = fruitTypes[i];
     return {
@@ -113,22 +124,22 @@ export function buildBoard(playerCount, rand) {
       value: FRUIT[type].value,
     };
   });
-  const fruitSet = new Set(fruitKeys);
 
-  const capKeys = pickFree(playerCount, (c, k) => {
-    return (
-      c.terrain === "open" &&
-      !startKeys.has(k) &&
-      !fruitSet.has(k) &&
-      distance(c, { q: 0, r: 0 }) >= 1
-    );
-  });
+  const capKeys = takeClearings(
+    map,
+    startKeys,
+    blocked,
+    playerCount,
+    rand,
+    (c) => distance(c, { q: 0, r: 0 }) >= 1
+  );
   const captures = capKeys.map((k, i) => ({
     id: `c${i}`,
     q: map[k].q,
     r: map[k].r,
     claimedBy: [],
   }));
+  shiftOntoClearings([...fruits, ...captures], map, startKeys, blocked, rand);
 
   return {
     hexes: map,
@@ -136,6 +147,30 @@ export function buildBoard(playerCount, rand) {
     captures,
     starts,
   };
+}
+
+function takeClearings(map, startKeys, blocked, n, rand, extra) {
+  const pool = Object.keys(map).filter((k) => {
+    const cell = map[k];
+    if (!cell || cell.terrain !== "open" || startKeys.has(k) || blocked.has(k)) return false;
+    return extra ? extra(cell, k) : true;
+  });
+  const chosen = pickN(pool, n, rand);
+  for (const k of chosen) blocked.add(k);
+  return chosen;
+}
+
+function shiftOntoClearings(items, map, startKeys, blocked, rand) {
+  for (const item of items) {
+    const here = key(item.q, item.r);
+    const cell = map[here];
+    if (cell && cell.terrain === "open" && !startKeys.has(here)) continue;
+    blocked.delete(here);
+    const next = takeClearings(map, startKeys, blocked, 1, rand)[0];
+    if (!next) continue;
+    item.q = map[next].q;
+    item.r = map[next].r;
+  }
 }
 
 function restoreConnectivity(map, starts) {

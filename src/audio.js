@@ -45,7 +45,30 @@ export function sfx(kind) {
     beep(700, 0.05, "sine", 0.03);
   } else if (kind === "card") {
     beep(880, 0.12, "triangle", 0.05);
+  } else if (kind === "freebounce") {
+    boing();
   }
+}
+
+function boing() {
+  if (muted) return;
+  const c = ac();
+  const t = c.currentTime;
+  const o = c.createOscillator();
+  const g = c.createGain();
+  o.type = "triangle";
+  o.frequency.setValueAtTime(196, t);
+  o.frequency.exponentialRampToValueAtTime(740, t + 0.08);
+  o.frequency.exponentialRampToValueAtTime(280, t + 0.2);
+  o.frequency.exponentialRampToValueAtTime(988, t + 0.32);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.08, t + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+  o.connect(g);
+  g.connect(c.destination);
+  o.start(t);
+  o.stop(t + 0.56);
+  setTimeout(() => beep(1318, 0.14, "square", 0.035), 180);
 }
 
 export function unlockAudio() {
