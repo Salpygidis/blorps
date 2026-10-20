@@ -187,10 +187,10 @@ export function makeBlorp(colorHex) {
   body.scale.y = 0.82;
   body.castShadow = true;
   const shine = new THREE.Mesh(
-    new THREE.SphereGeometry(0.11, 12, 12),
+    new THREE.SphereGeometry(0.06, 12, 12),
     new THREE.MeshStandardMaterial({ color: "#fff", roughness: 0.25 })
   );
-  shine.position.set(-0.14, 0.16, 0.26);
+  shine.position.set(0.16, 0.3, 0.06);
   const eyeWhite = new THREE.MeshStandardMaterial({ color: "#fff" });
   const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 12), eyeWhite);
   const eyeR = eyeL.clone();
@@ -210,7 +210,7 @@ export function makeBlorp(colorHex) {
   smile.position.set(0, 0.02, 0.36);
   smile.rotation.set(Math.PI, 0, 0);
   g.add(body, shine, eyeL, eyeR, smile);
-  g.userData = { body, eyeL, eyeR, colorHex };
+  g.userData = { body, eyeL, eyeR, colorHex, kind: "blorp" };
   return g;
 }
 
@@ -309,11 +309,11 @@ export function makeCapture() {
   return g;
 }
 
-export function makeHighlight() {
+export function makeHighlight(color = "#fff3a8") {
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(HEX_SIZE * 0.55, HEX_SIZE * 0.78, 6),
     new THREE.MeshBasicMaterial({
-      color: "#fff3a8",
+      color,
       side: THREE.DoubleSide,
       transparent: true,
       opacity: 0.85,

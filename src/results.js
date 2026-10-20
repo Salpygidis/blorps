@@ -99,6 +99,11 @@ export function describeResults(events = [], players = []) {
       } else {
         lines.push({ emoji: "👊", text: `${actor} bopped ${target}.` });
       }
+    } else if (ev.type === "firstPlayer") {
+      lines.push({
+        emoji: "🎲",
+        text: `${ev.name || playerName(players, ev.playerId)} goes first and starts with 1 less point.`,
+      });
     } else if (ev.type === "win") {
       lines.push({
         emoji: "🏆",

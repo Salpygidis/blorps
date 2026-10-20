@@ -9,6 +9,7 @@ import {
   BOUNCE_RANGE,
   BOP_RANGE,
   COLORS,
+  SLIME_DROP_COLOR,
 } from "../shared/constants.js";
 import { buildDeck, hasUpgrade } from "../shared/upgrades.js";
 import { fruitPickupPoints, tally } from "../shared/score.js";
@@ -35,6 +36,7 @@ import { buildBoard } from "./map.js";
  * on the landing hex. A slime picked up while pushed does not grant a free bounce.
  * Goo Armor: the first bop against you each round steals nothing and pushes only 1.
  * Treehopper hops over a tree on a free bounce or a bop.
+ * A random player goes first and starts with one fewer slime (1 less point).
  * Food and tokens never respawn.
  */
 export class Game {
@@ -101,7 +103,15 @@ export class Game {
     game.hostId = lobbyPlayers[0]?.id || "";
     game.upgradeDeck = shuffle(buildDeck(), game.rand);
     game.status = "playing";
-    game.beginTurn(0);
+    const racers = game.actors();
+    const start = racers.length ? Math.floor(game.rand() * racers.length) : 0;
+    const first = racers[start];
+    if (first) {
+      first.slime = Math.max(1, START_SLIME - 1);
+      game.events.push({ type: "firstPlayer", playerId: first.id, name: first.name });
+      game.note(`${first.name} goes first and starts with 1 less point.`);
+    }
+    game.beginTurn(start);
     game.note("The race is on! First to 10 points wins.");
     return game;
   }
@@ -482,7 +492,7 @@ export class Game {
       q,
       r,
       ownerId: player.id,
-      color: player.color.hex,
+      color: SLIME_DROP_COLOR,
     };
     this.slimes.push(token);
     this.events.push({ type: "drop", token });

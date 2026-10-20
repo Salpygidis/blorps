@@ -68,6 +68,11 @@ describe("result notifications", () => {
     );
   });
 
+  it("says who goes first and that they start a point down", () => {
+    const lines = describeResults([{ type: "firstPlayer", playerId: "a", name: "Pip" }], players);
+    assert.equal(lines[0].text, "Pip goes first and starts with 1 less point.");
+  });
+
   it("describes a crystal draw from the power-up deck", () => {
     const lines = describeResults(
       [{ type: "capture", playerId: "a", card: { name: "Zoomies", emoji: "💨" } }],

@@ -12,6 +12,8 @@ export const MAX_SPECTATORS = 12;
 export const ROOM_CODE_LEN = 4;
 export const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
+export const SLIME_DROP_COLOR = "#e6b325";
+
 export const COLORS = [
   { id: "pink", hex: "#ff6b9d", ink: "#fff", name: "Pink" },
   { id: "lime", hex: "#7adf4a", ink: "#163014", name: "Lime" },

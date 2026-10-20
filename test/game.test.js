@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { Game } from "../server/game.js";
 import { applyBotAction } from "../server/bot.js";
-import { START_SLIME, WIN_SLIME } from "../shared/constants.js";
+import { START_SLIME, WIN_SLIME, SLIME_DROP_COLOR } from "../shared/constants.js";
 import { tally } from "../shared/score.js";
 import { faceStep } from "../shared/hex.js";
 
@@ -29,12 +29,37 @@ function twoPlayers(extra = {}) {
 }
 
 describe("core rules", () => {
+  it("gives a random player the first turn and one fewer point", () => {
+    const lobby = [
+      { id: "a", name: "Pip" },
+      { id: "b", name: "Goo" },
+      { id: "c", name: "Nub" },
+    ];
+    const seen = new Set();
+    for (let i = 0; i < 24; i++) {
+      const g = Game.fromLobby(lobby, `SEED${i}`);
+      const first = g.current();
+      seen.add(first.id);
+      assert.equal(first.slime, START_SLIME - 1);
+      assert.equal(tally(first).points, START_SLIME - 1);
+      for (const player of g.actors()) {
+        if (player.id !== first.id) assert.equal(player.slime, START_SLIME);
+      }
+      assert.equal(g.events.some((ev) => ev.type === "firstPlayer" && ev.playerId === first.id), true);
+    }
+    assert.ok(seen.size > 1);
+    const again = Game.fromLobby(lobby, "SEED0");
+    const once = Game.fromLobby(lobby, "SEED0");
+    assert.equal(again.current().id, once.current().id);
+  });
+
   it("drops a slime token on the first hex of a move and shrinks", () => {
     const g = twoPlayers();
     const r = g.clickHex("a", 1, 0);
     assert.equal(r.ok, true);
     assert.equal(g.slimes.length, 1);
     assert.equal(g.slimes[0].q, 1);
+    assert.equal(g.slimes[0].color, SLIME_DROP_COLOR);
     assert.equal(g.playerById("a").slime, START_SLIME - 1);
     assert.equal(g.playerById("a").q, 1);
     assert.equal(g.remainingMove, 1);

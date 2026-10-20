@@ -18,7 +18,8 @@ Room state lives in the Node process memory. If the server restarts or sleeps, o
 
 ## Rules (short)
 
-- Start at size 3 with a 2-hex move. At size **6** your base move becomes **1**. Stepping up onto a higher hex costs **2** moves, or **1** if you are size 6 or bigger.
+- Start at size 3 with a 2-hex move. A random player goes first and starts with **1 less point** (one fewer slime). At size **6** your base move becomes **1**. Stepping up onto a higher hex costs **2** moves, or **1** if you are size 6 or bigger.
+- Hold the pointer on a hex for a second to read everything on it.
 - On your turn, tap a glowing hex. You may change direction between steps.
 - Trees block movement. You cannot stop on a tree or be bopped onto one. Treehopper lets a free bounce or a bop hop over a tree and land on a hex past it.
 - You **must drop 1 slime** on the first hex you land on. Each slime you still hold is **1 point** and is also your size.

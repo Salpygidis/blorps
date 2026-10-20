@@ -43,6 +43,7 @@ export const els = {
   btnMute: $("btn-mute"),
   btnHelp: $("btn-help"),
   toast: $("toast"),
+  hexTip: $("hex-tip"),
 };
 
 export function randomName() {
@@ -53,6 +54,32 @@ export function showScreen(name) {
   els.lobby.classList.toggle("hidden", name !== "lobby");
   els.waiting.classList.toggle("hidden", name !== "waiting");
   els.hud.classList.toggle("hidden", name !== "hud");
+}
+
+export function hideHexTip() {
+  if (!els.hexTip) return;
+  els.hexTip.classList.add("hidden");
+  els.hexTip.innerHTML = "";
+}
+
+export function showHexTip(lines, x, y) {
+  if (!els.hexTip || !lines?.length) return hideHexTip();
+  els.hexTip.innerHTML = lines
+    .map(
+      (line) =>
+        `<p><span class="emoji" aria-hidden="true">${line.emoji || ""}</span>${escapeHtml(line.text)}</p>`
+    )
+    .join("");
+  els.hexTip.classList.remove("hidden");
+  const pad = 12;
+  const width = els.hexTip.offsetWidth;
+  const height = els.hexTip.offsetHeight;
+  let left = x + 18;
+  let top = y + 18;
+  if (left + width > window.innerWidth - pad) left = x - width - 14;
+  if (top + height > window.innerHeight - pad) top = y - height - 14;
+  els.hexTip.style.left = `${Math.max(pad, left)}px`;
+  els.hexTip.style.top = `${Math.max(pad, top)}px`;
 }
 
 export function toast(msg) {
@@ -306,7 +333,8 @@ export function showHow() {
     <h2>How to play</h2>
     <p>You are a cute ooze. First to <strong>10 points</strong> wins. The tray at the bottom right is everything you are holding. Add it up.</p>
     <ul>
-      <li>Each slime you hold is <strong>1 point</strong> and is also your size. Start with 3. At size 6 you slow to 1 move. <strong>Zoomies</strong> lets your first step be a straight hop of 2 hexes, and big Blorps still move 2. <strong>Long Reach</strong> adds 1 move while you are smaller than size 6.</li>
+      <li>Each slime you hold is <strong>1 point</strong> and is also your size. Start with 3. A random Blorp goes first and starts with one fewer slime. At size 6 you slow to 1 move. <strong>Zoomies</strong> lets your first step be a straight hop of 2 hexes, and big Blorps still move 2. <strong>Long Reach</strong> adds 1 move while you are smaller than size 6.</li>
+      <li>Hold the pointer on a hex for a second to see everything there, including a slime standing under a crystal.</li>
       <li>Stepping up onto a higher hex costs 2 moves, or 1 if you are size 6 or bigger. <strong>Slip-n-Slide</strong> leaves water for 1 move, even uphill.</li>
       <li>On your turn, tap a glowing hex. You may change direction between steps. A Zoomies hop flies straight over the hex in the middle.</li>
       <li>Trees block the way. You cannot move onto one or be pushed onto one. <strong>Treehopper</strong> lets a free bounce or a bop hop <em>over</em> a tree and land on a hex past it.</li>

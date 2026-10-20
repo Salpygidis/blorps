@@ -125,8 +125,10 @@ describe("multiplayer rooms", () => {
     const start = await ask(a, "room:start");
     assert.equal(start.ok, true);
     const snap = await started;
-    assert.equal(snap.state.turnPlayerId, snap.state.players.find((p) => !p.isBot && !p.isSpectator).id);
-    assert.ok(snap.state.players.some((p) => p.isBot && p.slime === 3));
+    const racers = snap.state.players.filter((p) => !p.isSpectator);
+    const first = racers.find((p) => p.id === snap.state.turnPlayerId);
+    assert.equal(first.slime, 2);
+    assert.equal(racers.filter((p) => p.slime === 3).length, racers.length - 1);
     a.close();
   });
 });

@@ -15,8 +15,10 @@ import { loadBoardModels } from "./boardModels.js";
 import { tween, lerp, easeInOut } from "./tweens.js";
 import { hopLookPoint } from "./cameraFollow.js";
 import { describeResults } from "./results.js";
-import { announceFreeBounce, showResults } from "./ui.js";
+import { announceFreeBounce, hideHexTip, showHexTip, showResults } from "./ui.js";
+import { describeHex } from "./hexTip.js";
 import { sfx } from "./audio.js";
+import { SLIME_DROP_COLOR } from "../shared/constants.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -46,6 +48,11 @@ export class GameScene {
     this.last = { x: 0, y: 0 };
     this.pointers = new Map();
     this.pinch0 = 0;
+    this.hoverKey = "";
+    this.hoverAt = { x: 0, y: 0 };
+    this.hoverTimer = 0;
+    this.pressTimer = 0;
+    this.tipOn = false;
     this.debug = new URLSearchParams(location.search).has("debug");
 
     this.renderer = new THREE.WebGLRenderer({
@@ -255,6 +262,10 @@ export class GameScene {
     this.state = state;
     this.syncCollectibles(state);
     this.syncHighlights(state);
+    if (this.tipOn && this.hoverKey) {
+      const [q, r] = this.hoverKey.split(",").map(Number);
+      this.showHexTip(q, r, this.hoverAt.x, this.hoverAt.y);
+    }
     if (events?.length && this.mode === "play") {
       this.enqueue(() => this.playEvents(events, state));
     } else {
@@ -295,7 +306,7 @@ export class GameScene {
     });
 
     this.syncMap(this.tokens, state.slimes || [], (t) => {
-      const m = makeToken(t.color);
+      const m = makeToken(SLIME_DROP_COLOR);
       this.scene.add(m);
       return m;
     }, (m, t) => {
@@ -328,6 +339,9 @@ export class GameScene {
       const s = blorpScale(p.slime);
       m.scale.setScalar(s);
       m.userData.playerId = p.id;
+      m.userData.q = p.q;
+      m.userData.r = p.r;
+      m.userData.kind = "blorp";
       m.userData.idle = true;
       m.userData.baseY = m.position.y;
       offsetStack(m, p, state.players);
@@ -359,8 +373,10 @@ export class GameScene {
   syncHighlights(state) {
     for (const h of this.highlights) this.scene.remove(h);
     this.highlights = [];
+    const cur = (state.players || []).find((p) => p.id === state.turnPlayerId);
+    const color = cur?.color?.hex || "#fff3a8";
     for (const hex of state.legalHexes || []) {
-      const ring = makeHighlight();
+      const ring = makeHighlight(color);
       const { x, z } = hexToWorld(hex.q, hex.r);
       ring.position.set(x, this.topY(hex.q, hex.r) + 0.04, z);
       this.scene.add(ring);
@@ -490,12 +506,22 @@ export class GameScene {
       this.dragging = true;
       this.moved = false;
       this.last = { x: e.clientX, y: e.clientY };
+      clearTimeout(this.pressTimer);
+      this.pressTimer = setTimeout(() => {
+        if (this.moved) return;
+        const hex = this.hexAtPointer(this.last.x, this.last.y);
+        if (!hex) return;
+        this.moved = true;
+        this.showHexTip(hex.q, hex.r, this.last.x, this.last.y);
+      }, 1000);
       if (this.pointers.size === 2) {
         const [a, b] = [...this.pointers.values()];
         this.pinch0 = Math.hypot(a.x - b.x, a.y - b.y);
       }
     });
     el.addEventListener("pointermove", (e) => {
+      if (e.buttons === 0) this.trackHover(e.clientX, e.clientY);
+      else clearTimeout(this.hoverTimer);
       if (!this.pointers.has(e.pointerId)) return;
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (this.pointers.size === 2) {
@@ -517,12 +543,14 @@ export class GameScene {
       this.spherical.phi = clamp(this.spherical.phi - dy * 0.004, 0.45, 1.25);
     });
     const up = (e) => {
+      clearTimeout(this.pressTimer);
       if (this.dragging && !this.moved && this.pointers.size <= 1) {
         this.pick(e.clientX, e.clientY);
       }
       this.pointers.delete(e.pointerId);
       if (!this.pointers.size) this.dragging = false;
     };
+    el.addEventListener("pointerleave", () => this.cancelHover(true));
     el.addEventListener("pointerup", up);
     el.addEventListener("pointercancel", up);
     el.addEventListener(
@@ -533,6 +561,70 @@ export class GameScene {
       },
       { passive: false }
     );
+  }
+
+  trackHover(cx, cy) {
+    if (!this.state || this.state.status !== "playing") {
+      this.cancelHover(true);
+      return;
+    }
+    const hex = this.hexAtPointer(cx, cy);
+    const k = hex ? key(hex.q, hex.r) : "";
+    this.hoverAt = { x: cx, y: cy };
+    if (k === this.hoverKey) return;
+    this.hoverKey = k;
+    clearTimeout(this.hoverTimer);
+    this.dismissTip();
+    if (!hex) return;
+    this.hoverTimer = setTimeout(() => {
+      this.showHexTip(hex.q, hex.r, cx, cy);
+    }, 1000);
+  }
+
+  cancelHover(hide) {
+    clearTimeout(this.hoverTimer);
+    clearTimeout(this.pressTimer);
+    this.hoverKey = "";
+    if (hide) this.dismissTip();
+  }
+
+  dismissTip() {
+    this.tipOn = false;
+    hideHexTip();
+  }
+
+  showHexTip(q, r, x, y) {
+    if (!this.state) return;
+    this.hoverKey = key(q, r);
+    this.hoverAt = { x, y };
+    this.tipOn = true;
+    showHexTip(describeHex(this.state, q, r, this.localId), x, y);
+  }
+
+  hexAtPointer(cx, cy) {
+    const rect = this.canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    this.pointer.x = ((cx - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((cy - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const stuff = [
+      ...[...this.hexes.values()].map((h) => h.mesh),
+      ...this.fruits.values(),
+      ...this.tokens.values(),
+      ...this.captures.values(),
+      ...this.blorps.values(),
+    ];
+    const hits = this.raycaster.intersectObjects(stuff, true);
+    if (!hits.length) return null;
+    const blorp = blorpOf(hits[0].object);
+    if (blorp && Number.isFinite(blorp.userData.q)) {
+      return { q: blorp.userData.q, r: blorp.userData.r };
+    }
+    const collectible = collectibleOf(hits[0].object);
+    if (collectible) return { q: collectible.userData.q, r: collectible.userData.r };
+    const tile = hexTileOf(hits[0].object);
+    if (!tile) return null;
+    return { q: tile.userData.q, r: tile.userData.r };
   }
 
   pick(cx, cy) {
@@ -627,6 +719,15 @@ export class GameScene {
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(this.loop);
   }
+}
+
+function blorpOf(obj) {
+  let cur = obj;
+  while (cur) {
+    if (cur.userData?.kind === "blorp") return cur;
+    cur = cur.parent;
+  }
+  return null;
 }
 
 function collectibleOf(obj) {
