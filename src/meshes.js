@@ -289,21 +289,76 @@ export function makeFruit(fruit) {
   return g;
 }
 
-export function makeToken(color) {
-  const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.16, 16, 12),
+let slimeTokenMap = null;
+
+function slimeTokenTexture() {
+  if (slimeTokenMap) return slimeTokenMap;
+  const size = 256;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const g = c.getContext("2d");
+  g.beginPath();
+  g.arc(128, 128, 126, 0, Math.PI * 2);
+  g.fillStyle = "#ffe7a0";
+  g.fill();
+  g.fillStyle = "#7adf4a";
+  g.beginPath();
+  g.ellipse(128, 146, 78, 64, 0, 0, Math.PI * 2);
+  g.fill();
+  const eye = (x, y) => {
+    g.fillStyle = "#ffffff";
+    g.beginPath();
+    g.arc(x, y, 16, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = "#1b2430";
+    g.beginPath();
+    g.arc(x + 2, y + 3, 7, 0, Math.PI * 2);
+    g.fill();
+  };
+  eye(104, 136);
+  eye(152, 136);
+  g.strokeStyle = "#c4456a";
+  g.lineWidth = 5;
+  g.lineCap = "round";
+  g.beginPath();
+  g.moveTo(106, 162);
+  g.quadraticCurveTo(128, 186, 150, 162);
+  g.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  slimeTokenMap = tex;
+  return tex;
+}
+
+/** Flat board token. The disc uses the drop color; the face is a slime. */
+export function makeToken(color = "#e6b325") {
+  const radius = 0.5;
+  const height = 0.05;
+  const g = new THREE.Group();
+  const disc = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, height, 32),
     new THREE.MeshStandardMaterial({
       color,
-      transparent: true,
-      opacity: 0.85,
-      roughness: 0.3,
-      emissive: color,
-      emissiveIntensity: 0.2,
+      roughness: 0.42,
+      metalness: 0.22,
     })
   );
-  mesh.scale.y = 0.45;
-  mesh.castShadow = true;
-  return mesh;
+  disc.position.y = height / 2;
+  disc.castShadow = true;
+  disc.receiveShadow = true;
+  const face = new THREE.Mesh(
+    new THREE.CircleGeometry(radius * 0.84, 32),
+    new THREE.MeshBasicMaterial({
+      map: typeof document === "undefined" ? null : slimeTokenTexture(),
+      color: typeof document === "undefined" ? "#7adf4a" : "#ffffff",
+    })
+  );
+  face.rotation.x = -Math.PI / 2;
+  face.position.y = height + 0.004;
+  g.add(disc, face);
+  return g;
 }
 
 export function makeCapture() {

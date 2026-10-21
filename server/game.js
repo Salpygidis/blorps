@@ -19,11 +19,12 @@ import { buildBoard } from "./map.js";
  * Authoritative Blorps rules.
  *
  * Movement: tap an adjacent legal hex, up to remainingMove times.
- * Zoomies: the first move may be a straight hop of 2 hexes, and size 6+ still moves 2.
+ * Zoomies: the first move may be a straight hop of 2 hexes. Size 6+ still starts with 1 move.
  * Long Reach: +1 movement while smaller than size 6.
  * Stepping onto a higher hex costs 2. A big slime (size 6+) climbs for 1.
  * Slip-n-Slide: leaving water costs 1, even uphill.
  * First hex of the main move: drop 1 slime token (size stays at least 1).
+ * If that hex already has another Blorp, hand them the slime instead of leaving a token.
  * Land on a slime token (anyone's): pick it up for +1 and one free bounce.
  * Free bounce: leave through one of the six sides and keep going, up to 2 hexes.
  * Fruit stays in your tray: apple/banana 1, grapes 2. It does not change your size.
@@ -31,7 +32,9 @@ import { buildBoard } from "./map.js";
  * also add +1 for each of that fruit currently in your tray.
  * Points are the tray total. First to 10 wins. Size is still your slime count.
  * A new crystal draws the top power-up card. Each player draws once per crystal.
- * Land on a player: Bounce (same free bounce) or Bop (push up to 2 straight, steal 1).
+ * Land on a player: Bounce (same free bounce) or Bop (push up to 2 straight).
+ * A bop steals 1 slime, or a random fruit from their tray if you choose that.
+ * A bop that lands on another Blorp bumps that Blorp 1 hex in the same direction.
  * A pushed Blorp does not drop goo. They pick up fruit, slime, and a new crystal
  * on the landing hex. A slime picked up while pushed does not grant a free bounce.
  * Goo Armor: the first bop against you each round steals nothing and pushes only 1.
@@ -200,7 +203,6 @@ export class Game {
 
   moveRange(p) {
     let m = p.slime >= SIZE_SLOW_AT ? BASE_MOVE_BIG : BASE_MOVE_SMALL;
-    if (hasUpgrade(p, "zoomies")) m = Math.max(m, BASE_MOVE_SMALL);
     if (hasUpgrade(p, "longreach") && p.slime < SIZE_SLOW_AT) m += 1;
     return m;
   }
@@ -338,11 +340,13 @@ export class Game {
         otherId: other?.id,
         otherName: other?.name,
       });
-    } else if (action === "bop") {
+    } else if (action === "bop" || action === "bop-fruit") {
       if (!other) return fail("They already wiggled away.");
+      const steal = action === "bop-fruit" ? "fruit" : "slime";
       this.phase = "bop";
-      this.phaseData = { otherId: other.id, pendingBounce: owedBounce };
-      this.note(`${player.name} winds up a bop on ${other.name}!`);
+      this.phaseData = { otherId: other.id, pendingBounce: owedBounce, steal };
+      const prize = steal === "fruit" ? "a fruit" : "a slime";
+      this.note(`${player.name} winds up a bop on ${other.name} for ${prize}!`);
       if (this.legalHexes().length === 0) {
         this.stealFrom(player, other);
         this.note(`${other.name} has nowhere to fly.`);
@@ -419,13 +423,25 @@ export class Game {
     if (this.status !== "playing") return;
 
     if (firstMain) {
-      this.placeSlime(player, q, r);
-      this.addSlime(player, -1, "drop");
-      this.note(`${player.name} leaves a goo drop.`);
+      const landedOn = this.occupant(q, r, player.id);
+      if (landedOn) {
+        this.addSlime(player, -1, "drop");
+        this.addSlime(landedOn, 1, "handoff");
+        this.events.push({ type: "handoff", playerId: player.id, otherId: landedOn.id });
+        this.note(`${player.name} hands a slime to ${landedOn.name}.`);
+      } else {
+        const before = this.slimes.length;
+        this.placeSlime(player, q, r);
+        if (this.slimes.length > before) {
+          this.addSlime(player, -1, "drop");
+          this.note(`${player.name} leaves a goo drop.`);
+        }
+      }
       if (this.status !== "playing") return;
     }
 
     this.tryClaimCapture(player, q, r);
+    if (this.status !== "playing") return;
     const other = this.occupant(q, r, player.id);
 
     if (this.phase === "upgrade") {
@@ -486,7 +502,8 @@ export class Game {
 
   placeSlime(player, q, r) {
     if (this.hexAt(q, r)?.terrain === "tree") return;
-    if (this.slimeAt(q, r)) return;
+    if (this.fruitAt(q, r) || this.slimeAt(q, r)) return;
+    if (this.occupant(q, r, player.id)) return;
     const token = {
       id: uid("s"),
       q,
@@ -598,6 +615,7 @@ export class Game {
   }
 
   stealFrom(actor, victim) {
+    const stealFruit = this.phaseData?.steal === "fruit";
     if (this.armorReady(victim)) {
       victim.armorRound = this.roundIndex();
       this.note(`${victim.name}'s Goo Armor holds — no steal!`);
@@ -606,7 +624,39 @@ export class Game {
         actorId: actor.id,
         targetId: victim.id,
         stolen: 0,
+        armored: true,
       });
+      return;
+    }
+    if (stealFruit) {
+      const basket = victim.basket || [];
+      if (!basket.length) {
+        this.note(`${victim.name} has no fruit to take.`);
+        this.events.push({
+          type: "bopSteal",
+          actorId: actor.id,
+          targetId: victim.id,
+          stolen: 0,
+          fruit: null,
+        });
+        return;
+      }
+      const index = Math.floor(this.rand() * basket.length);
+      const [fruit] = basket.splice(index, 1);
+      victim.basket = basket;
+      actor.basket = actor.basket || [];
+      actor.basket.push(fruit);
+      this.events.push({
+        type: "bopSteal",
+        actorId: actor.id,
+        targetId: victim.id,
+        stolen: 0,
+        fruit: fruit.type,
+      });
+      const fruitName =
+        fruit.type === "apple" ? "an apple" : fruit.type === "banana" ? "a banana" : fruit.type === "grapes" ? "grapes" : `a ${fruit.type}`;
+      this.note(`${actor.name} bops ${victim.name} and takes ${fruitName}!`);
+      this.checkScore(actor);
       return;
     }
     if (victim.slime <= 1) {
@@ -640,6 +690,27 @@ export class Game {
         continue;
       }
       if (!this.canLand(h.q, h.r, victim.id)) return;
+      if (!sameHex(h, { q, r }) && this.occupant(h.q, h.r, victim.id)) return;
+    }
+    const dir = this.bopStep(from, { q, r });
+    const chain = dir ? this.bopChain({ q, r }, dir, new Set([victim.id, actor.id]), actor) : null;
+    if (!dir || !chain) return;
+    const moved = [];
+    for (const blorp of [...chain].reverse()) {
+      const start = { q: blorp.q, r: blorp.r };
+      const dest = { q: blorp.q + dir.q, r: blorp.r + dir.r };
+      blorp.q = dest.q;
+      blorp.r = dest.r;
+      this.events.push({
+        type: "bop",
+        actorId: actor.id,
+        targetId: blorp.id,
+        from: start,
+        to: dest,
+        chain: true,
+      });
+      this.note(`${blorp.name} is bumped 1 hex.`);
+      moved.push(blorp);
     }
     victim.q = q;
     victim.r = r;
@@ -650,15 +721,50 @@ export class Game {
       from,
       to: { q, r },
     });
+    moved.push(victim);
     this.stealFrom(actor, victim);
     if (this.status !== "playing") return;
-    // The landing hex is collected. The victim does not drop, and a slime
-    // picked up on the way does not start a free bounce.
-    this.absorbFruit(victim, q, r, false, { pushed: true });
-    this.absorbSlimeToken(victim, q, r, { pushed: true });
-    this.tryClaimCapture(victim, q, r, { interrupt: false, pushed: true });
-    if (this.status !== "playing") return;
+    // Each pushed Blorp collects the hex they land on. They do not drop,
+    // and a slime token does not start a free bounce.
+    for (const blorp of moved) {
+      this.absorbFruit(blorp, blorp.q, blorp.r, false, { pushed: true });
+      if (this.status !== "playing") return;
+      this.absorbSlimeToken(blorp, blorp.q, blorp.r, { pushed: true });
+      this.tryClaimCapture(blorp, blorp.q, blorp.r, { interrupt: false, pushed: true });
+      if (this.status !== "playing") return;
+    }
     this.continueAfterSpecial(actor);
+  }
+
+  bopStep(from, to) {
+    const line = hexLine(from, to);
+    if (line.length < 2) return null;
+    return { q: line[1].q - from.q, r: line[1].r - from.r };
+  }
+
+  /**
+   * Blorps who must slide 1 hex in `dir` so `hex` is free to land on.
+   * Listed near to far. Null when the slide would leave the board, hit a tree,
+   * or land on the bopper.
+   */
+  bopChain(hex, dir, ignoreIds, actor) {
+    const chain = [];
+    const seen = new Set(ignoreIds);
+    let q = hex.q;
+    let r = hex.r;
+    for (let guard = 0; guard < 8; guard++) {
+      const blocker = this.actors().find((p) => p.q === q && p.r === r && !seen.has(p.id));
+      if (!blocker) return chain;
+      const nq = q + dir.q;
+      const nr = r + dir.r;
+      if (!this.canLand(nq, nr, blocker.id)) return null;
+      if (actor && actor.q === nq && actor.r === nr) return null;
+      chain.push(blocker);
+      seen.add(blocker.id);
+      q = nq;
+      r = nr;
+    }
+    return null;
   }
 
   continueAfterSpecial(player) {
@@ -781,8 +887,14 @@ export class Game {
           continue;
         }
         if (!this.canLand(h.q, h.r, victim.id)) break;
-        if (this.occupant(h.q, h.r, victim.id)) break;
         if (sameHex(h, p)) break;
+        const occ = this.occupant(h.q, h.r, victim.id);
+        if (occ) {
+          if (occ.id === p.id) break;
+          if (!this.bopChain(h, d, new Set([victim.id, p.id]), p)) break;
+          out.push(h);
+          break;
+        }
         out.push(h);
       }
     }
@@ -798,6 +910,7 @@ export class Game {
         otherId: o?.id,
         otherName: o?.name || "Blorp",
         otherColor: o?.color?.hex,
+        fruitCount: o?.basket?.length || 0,
       };
     }
     if (this.phase === "bop") {
@@ -809,6 +922,7 @@ export class Game {
         otherId: o?.id,
         otherName: o?.name || "Blorp",
         range,
+        steal: this.phaseData?.steal || "slime",
       };
     }
     if (this.phase === "bounce") {

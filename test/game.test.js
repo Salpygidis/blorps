@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { Game } from "../server/game.js";
-import { applyBotAction } from "../server/bot.js";
+import { applyBotAction, chooseBotAction } from "../server/bot.js";
 import { START_SLIME, WIN_SLIME, SLIME_DROP_COLOR } from "../shared/constants.js";
 import { tally } from "../shared/score.js";
 import { faceStep } from "../shared/hex.js";
@@ -172,6 +172,47 @@ describe("core rules", () => {
     assert.equal(g.playerById("a").q, 0);
   });
 
+  it("bumps the next slime 1 hex when a bop lands on them", () => {
+    const g = Game.testHarness({
+      hexes: lineBoard(),
+      players: [
+        { id: "a", name: "Pip", q: 0, r: 0, slime: START_SLIME },
+        { id: "b", name: "Goo", q: 1, r: 0, slime: 5 },
+        { id: "c", name: "Blobbo", q: 3, r: 0, slime: 4 },
+      ],
+    });
+    g.clickHex("a", 1, 0);
+    assert.equal(g.events.some((e) => e.type === "handoff" && e.otherId === "b"), true);
+    assert.equal(g.slimes.length, 0);
+    g.chooseContact("a", "bop");
+    assert.equal(g.legalHexes().some((h) => h.q === 3 && h.r === 0), true);
+    assert.equal(g.legalHexes().some((h) => h.q === 4 && h.r === 0), false);
+    assert.equal(g.clickHex("a", 3, 0).ok, true);
+    assert.equal(g.playerById("b").q, 3);
+    assert.equal(g.playerById("c").q, 4);
+    // Landing handed Goo a slime, then the steal took it back.
+    assert.equal(g.playerById("b").slime, 5);
+    assert.equal(g.playerById("c").slime, 4);
+    assert.equal(g.slimes.length, 0);
+    assert.equal(g.events.filter((e) => e.type === "bop" && e.chain).length, 1);
+    assert.equal(g.events.some((e) => e.type === "bopSteal" && e.targetId === "c"), false);
+
+    const blocked = Game.testHarness({
+      hexes: lineBoard().map((h) => (h.q === 4 ? { ...h, terrain: "tree" } : h)),
+      players: [
+        { id: "a", name: "Pip", q: 0, r: 0, slime: START_SLIME },
+        { id: "b", name: "Goo", q: 1, r: 0, slime: 5 },
+        { id: "c", name: "Blobbo", q: 3, r: 0, slime: 4 },
+      ],
+    });
+    blocked.clickHex("a", 1, 0);
+    blocked.chooseContact("a", "bop");
+    assert.equal(blocked.legalHexes().some((h) => h.q === 3 && h.r === 0), false);
+    assert.equal(blocked.clickHex("a", 3, 0).ok, false);
+    assert.equal(blocked.playerById("b").q, 1);
+    assert.equal(blocked.playerById("c").q, 3);
+  });
+
   it("lets you bounce off another player or bop them", () => {
     const g = twoPlayers();
     g.playerById("b").q = 1;
@@ -187,7 +228,131 @@ describe("core rules", () => {
     g.clickHex("a", push.q, push.r);
     assert.equal(g.playerById("b").q, push.q);
     assert.equal(g.playerById("a").slime, START_SLIME - 1 + 1);
-    assert.equal(g.playerById("b").slime, 4);
+    assert.equal(g.playerById("b").slime, 5);
+    assert.equal(g.slimes.length, 0);
+  });
+
+  it("hands the first-move slime to the player you land on", () => {
+    const g = twoPlayers({
+      fruits: [{ id: "ap", q: 1, r: 0, type: "apple", value: 1 }],
+      captures: [{ id: "c1", q: 1, r: 0, claimedBy: ["a", "b"] }],
+    });
+    g.playerById("b").q = 1;
+    g.playerById("b").r = 0;
+    g.playerById("b").slime = 5;
+    g.clickHex("a", 1, 0);
+    assert.equal(g.phase, "contact");
+    assert.equal(g.slimes.length, 0);
+    assert.equal(g.fruits.length, 0);
+    assert.equal(g.playerById("a").basket[0].type, "apple");
+    assert.equal(g.playerById("b").basket.length, 0);
+    assert.equal(g.playerById("a").slime, START_SLIME - 1);
+    assert.equal(g.playerById("b").slime, 6);
+    assert.equal(g.playerById("a").q, 1);
+    assert.equal(g.playerById("b").q, 1);
+    assert.equal(g.captureAt(1, 0) != null, true);
+    assert.equal(g.events.some((e) => e.type === "handoff" && e.otherId === "b"), true);
+    assert.equal(g.events.some((e) => e.type === "drop"), false);
+    assert.equal(g.uiHints().fruitCount, 0);
+
+    const tiny = twoPlayers();
+    tiny.playerById("a").slime = 1;
+    tiny.playerById("b").q = 1;
+    tiny.playerById("b").r = 0;
+    tiny.playerById("b").slime = 4;
+    tiny.clickHex("a", 1, 0);
+    assert.equal(tiny.playerById("a").slime, 1);
+    assert.equal(tiny.playerById("b").slime, 5);
+    assert.equal(tiny.slimes.length, 0);
+
+    const win = twoPlayers();
+    win.playerById("b").q = 1;
+    win.playerById("b").r = 0;
+    win.playerById("b").slime = WIN_SLIME - 1;
+    win.clickHex("a", 1, 0);
+    assert.equal(win.status, "finished");
+    assert.equal(win.winnerId, "b");
+    assert.equal(win.phase, "over");
+    assert.equal(win.playerById("b").slime, WIN_SLIME);
+    assert.equal(win.slimes.length, 0);
+
+    const later = twoPlayers();
+    later.clickHex("a", 1, 0);
+    assert.equal(later.slimes.length, 1);
+    later.playerById("b").q = 2;
+    later.playerById("b").r = 0;
+    const bSlime = later.playerById("b").slime;
+    later.clickHex("a", 2, 0);
+    assert.equal(later.phase, "contact");
+    assert.equal(later.playerById("b").slime, bSlime);
+    assert.equal(later.events.some((e) => e.type === "handoff"), false);
+    assert.equal(later.slimes.length, 1);
+    assert.equal(later.slimes[0].q, 1);
+  });
+
+  it("lets a bop take a random fruit instead of a slime", () => {
+    const g = twoPlayers();
+    g.playerById("b").q = 1;
+    g.playerById("b").r = 0;
+    g.playerById("b").slime = 5;
+    g.playerById("b").basket = [
+      { id: "ba", type: "banana" },
+      { id: "gr", type: "grapes" },
+    ];
+    g.clickHex("a", 1, 0);
+    assert.equal(g.uiHints().fruitCount, 2);
+    const aSlime = g.playerById("a").slime;
+    const bSlime = g.playerById("b").slime;
+    g.chooseContact("a", "bop-fruit");
+    assert.equal(g.phase, "bop");
+    assert.equal(g.uiHints().steal, "fruit");
+    g.clickHex("a", 3, 0);
+    assert.equal(g.playerById("b").q, 3);
+    assert.equal(g.playerById("a").slime, aSlime);
+    assert.equal(g.playerById("b").slime, bSlime);
+    assert.equal(g.playerById("a").basket.length, 1);
+    assert.equal(g.playerById("b").basket.length, 1);
+    const taken = g.playerById("a").basket[0];
+    assert.ok(taken.id === "ba" || taken.id === "gr");
+    assert.equal(
+      g.playerById("b").basket.some((f) => f.id === taken.id),
+      false
+    );
+    const steal = g.events.find((e) => e.type === "bopSteal");
+    assert.equal(steal.stolen, 0);
+    assert.equal(steal.fruit, taken.type);
+    assert.equal(steal.armored, undefined);
+
+    const empty = twoPlayers();
+    empty.playerById("b").q = 1;
+    empty.playerById("b").r = 0;
+    empty.playerById("b").slime = 5;
+    empty.clickHex("a", 1, 0);
+    const emptyA = empty.playerById("a").slime;
+    const emptyB = empty.playerById("b").slime;
+    empty.chooseContact("a", "bop-fruit");
+    empty.clickHex("a", 3, 0);
+    assert.equal(empty.playerById("b").q, 3);
+    assert.equal(empty.playerById("a").basket.length, 0);
+    assert.equal(empty.playerById("a").slime, emptyA);
+    assert.equal(empty.playerById("b").slime, emptyB);
+    assert.equal(empty.events.find((e) => e.type === "bopSteal").fruit, null);
+
+    const armor = twoPlayers();
+    armor.playerById("b").q = 1;
+    armor.playerById("b").r = 0;
+    armor.playerById("b").slime = 5;
+    armor.playerById("b").basket = [{ id: "ap", type: "apple" }];
+    armor.playerById("b").upgrades.push({ id: "gooarmor" });
+    armor.clickHex("a", 1, 0);
+    armor.chooseContact("a", "bop-fruit");
+    armor.clickHex("a", 2, 0);
+    assert.equal(armor.playerById("b").q, 2);
+    assert.equal(armor.playerById("b").basket[0].type, "apple");
+    assert.equal(armor.playerById("a").basket.length, 0);
+    assert.equal(armor.playerById("b").slime, 6);
+    assert.equal(armor.events.find((e) => e.type === "bopSteal").armored, true);
+    assert.equal(armor.events.find((e) => e.type === "bopSteal").stolen, 0);
   });
 
   it("announces a free bounce when you bounce off a player", () => {
@@ -259,7 +424,9 @@ describe("core rules", () => {
     assert.equal(g.remainingMove, 1);
     g.playerById("a").upgrades.push({ id: "zoomies" });
     g.beginTurn(0);
-    assert.equal(g.remainingMove, 2);
+    assert.equal(g.remainingMove, 1);
+    g.clickHex("a", 1, 0);
+    assert.equal(g.current().id, "b");
   });
 
   it("draws one deck card from a new crystal and will not draw it again", () => {
@@ -391,10 +558,22 @@ describe("core rules", () => {
     assert.equal(g.playerById("b").r, 0);
   });
 
-  it("does not leave a slime token on a tree", () => {
-    const g = twoPlayers();
+  it("does not leave a slime token on a tree, fruit, a token, or another player", () => {
+    const g = twoPlayers({
+      fruits: [{ id: "ap", q: 1, r: 0, type: "apple" }],
+      slimes: [{ id: "s1", q: 2, r: 0, ownerId: "b", color: "#fff" }],
+      captures: [{ id: "c1", q: 4, r: 0, claimedBy: [] }],
+    });
+    g.playerById("b").q = 3;
+    g.playerById("b").r = 0;
     g.placeSlime(g.playerById("a"), 3, -1);
-    assert.equal(g.slimes.length, 0);
+    g.placeSlime(g.playerById("a"), 1, 0);
+    g.placeSlime(g.playerById("a"), 2, 0);
+    g.placeSlime(g.playerById("a"), 3, 0);
+    assert.equal(g.slimes.length, 1);
+    assert.equal(g.slimes[0].id, "s1");
+    g.placeSlime(g.playerById("a"), 4, 0);
+    assert.equal(g.slimes.some((s) => s.q === 4 && s.r === 0), true);
   });
 
   it("will not let a crystal on a tree be entered or drawn", () => {
@@ -445,7 +624,7 @@ describe("core rules", () => {
     assert.equal(g.remainingMove, 1);
     g.playerById("a").upgrades.push({ id: "zoomies" });
     g.beginTurn(0);
-    assert.equal(g.remainingMove, 2);
+    assert.equal(g.remainingMove, 1);
   });
 
   it("Zoomies opens with a straight 2-hex hop", () => {
@@ -562,9 +741,10 @@ describe("core rules", () => {
     assert.equal(g.legalHexes().some((h) => h.q === 5 && h.r === 0), false);
     g.clickHex("a", 3, 0);
     assert.equal(g.playerById("b").q, 3);
-    assert.equal(g.playerById("b").slime, 5);
+    assert.equal(g.playerById("b").slime, 6);
     assert.equal(g.playerById("a").slime, START_SLIME - 1);
     assert.equal(g.events.find((e) => e.type === "bopSteal").stolen, 0);
+    assert.equal(g.events.find((e) => e.type === "bopSteal").armored, true);
 
     g.playerById("b").armorRound = g.roundIndex();
     g.slimes = [];
@@ -582,7 +762,7 @@ describe("core rules", () => {
     assert.equal(g.legalHexes().some((h) => h.q === 5 && h.r === 0), true);
     g.clickHex("a", 5, 0);
     assert.equal(g.playerById("b").q, 5);
-    assert.equal(g.playerById("b").slime, 4);
+    assert.equal(g.playerById("b").slime, 5);
     assert.equal(g.playerById("a").slime, aBefore + 1);
     assert.equal(g.events.find((e) => e.type === "bopSteal").stolen, 1);
   });
@@ -600,9 +780,9 @@ describe("core rules", () => {
     fruit.clickHex("a", 3, 0);
     assert.equal(fruit.playerById("b").q, 3);
     assert.equal(fruit.fruits.length, 0);
-    assert.equal(fruit.playerById("b").slime, 4);
+    assert.equal(fruit.playerById("b").slime, 5);
     assert.equal(fruit.playerById("b").basket[0].type, "apple");
-    assert.equal(tally(fruit.playerById("b")).points, 5);
+    assert.equal(tally(fruit.playerById("b")).points, 6);
     assert.equal(fruit.slimes.some((s) => s.q === 3 && s.r === 0), false);
     assert.equal(fruit.slimes.some((s) => s.ownerId === "b"), false);
     assert.equal(fruit.events.some((e) => e.type === "freeBounce"), false);
@@ -620,7 +800,7 @@ describe("core rules", () => {
     token.chooseContact("a", "bop");
     token.clickHex("a", 3, 0);
     assert.equal(token.events.find((e) => e.type === "absorbSlime").amount, 1);
-    assert.equal(token.playerById("b").slime, 5);
+    assert.equal(token.playerById("b").slime, 6);
     assert.equal(token.slimes.some((s) => s.id === "s1"), false);
     assert.equal(token.slimes.some((s) => s.q === 3), false);
     assert.equal(token.events.some((e) => e.type === "freeBounce"), false);
@@ -657,7 +837,7 @@ describe("core rules", () => {
     flown.clickHex("a", 4, 0);
     assert.equal(flown.playerById("b").q, 4);
     assert.equal(flown.fruits.length, 1);
-    assert.equal(flown.playerById("b").slime, 4);
+    assert.equal(flown.playerById("b").slime, 5);
     assert.equal(flown.events.some((e) => e.type === "absorbFruit"), false);
   });
 
@@ -717,5 +897,23 @@ describe("bots", () => {
     assert.equal(g.phase, "contact");
     applyBotAction(g);
     assert.equal(g.phase, "bop");
+    assert.equal(g.phaseData.steal, "slime");
+  });
+
+  it("bops for fruit when the other Blorp is too small to steal goo from", () => {
+    const g = twoPlayers();
+    g.playerById("a").isBot = true;
+    g.phase = "contact";
+    g.phaseData = { otherId: "b" };
+    g.playerById("b").slime = 1;
+    g.playerById("b").basket = [{ id: "ap", type: "apple" }];
+    assert.deepEqual(chooseBotAction(g), { type: "contact", action: "bop-fruit" });
+
+    g.playerById("b").slime = 4;
+    assert.deepEqual(chooseBotAction(g), { type: "contact", action: "bop" });
+
+    g.playerById("b").slime = 1;
+    g.playerById("b").basket = [];
+    assert.deepEqual(chooseBotAction(g), { type: "contact", action: "bounce" });
   });
 });

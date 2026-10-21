@@ -12,6 +12,7 @@ export function chooseBotAction(game) {
   if (game.phase === "contact") {
     const other = game.playerById(game.phaseData.otherId);
     if (other && other.slime > 1) return { type: "contact", action: "bop" };
+    if (other?.basket?.length) return { type: "contact", action: "bop-fruit" };
     return { type: "contact", action: "bounce" };
   }
 

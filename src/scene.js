@@ -310,7 +310,7 @@ export class GameScene {
       this.scene.add(m);
       return m;
     }, (m, t) => {
-      this.placeCollectible(m, t.q, t.r, 0.12);
+      this.placeCollectible(m, t.q, t.r, 0.02);
     });
 
     this.syncMap(this.captures, state.captures || [], () => {

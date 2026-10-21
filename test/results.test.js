@@ -109,6 +109,39 @@ describe("result notifications", () => {
       ]
     );
   });
+
+  it("describes a slime handoff and a fruit bop", () => {
+    const lines = describeResults(
+      [
+        { type: "handoff", playerId: "a", otherId: "b" },
+        { type: "bop", actorId: "a", targetId: "b" },
+        { type: "bopSteal", actorId: "a", targetId: "b", stolen: 0, fruit: "grapes" },
+      ],
+      players
+    );
+    assert.deepEqual(
+      lines.map((l) => l.text),
+      ["Pip handed a slime to Goo.", "Pip bopped Goo and took grapes."]
+    );
+
+    const armor = describeResults(
+      [
+        { type: "bop", actorId: "a", targetId: "b" },
+        { type: "bopSteal", actorId: "a", targetId: "b", stolen: 0, armored: true },
+      ],
+      players
+    );
+    assert.equal(armor[0].text, "Pip bopped Goo, but Goo's armor held. No points stolen.");
+
+    const none = describeResults(
+      [
+        { type: "bop", actorId: "a", targetId: "b" },
+        { type: "bopSteal", actorId: "a", targetId: "b", stolen: 0, fruit: null },
+      ],
+      players
+    );
+    assert.equal(none[0].text, "Pip bopped Goo, who had no fruit to take.");
+  });
 });
 
 describe("camera follow", () => {

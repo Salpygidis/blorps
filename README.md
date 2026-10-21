@@ -18,21 +18,21 @@ Room state lives in the Node process memory. If the server restarts or sleeps, o
 
 ## Rules (short)
 
-- Start at size 3 with a 2-hex move. A random player goes first and starts with **1 less point** (one fewer slime). At size **6** your base move becomes **1**. Stepping up onto a higher hex costs **2** moves, or **1** if you are size 6 or bigger.
+- Start at size 3 with a 2-hex move. A random player goes first and starts with **1 less point** (one fewer slime). At size **6** your turn starts with **1** move. Stepping up onto a higher hex costs **2** moves, or **1** if you are size 6 or bigger.
 - Hold the pointer on a hex for a second to read everything on it.
 - On your turn, tap a glowing hex. You may change direction between steps.
 - Trees block movement. You cannot stop on a tree or be bopped onto one. Treehopper lets a free bounce or a bop hop over a tree and land on a hex past it.
-- You **must drop 1 slime** on the first hex you land on. Each slime you still hold is **1 point** and is also your size.
+- You **must drop 1 slime** on the first hex you land on. If another player is already on that hex, you hand them the slime instead of leaving a token. Each slime you still hold is **1 point** and is also your size.
 - Landing on a slime token (yours or anyone’s) puts it in your tray for **1 point** and gives a **free bounce**.
 - A free bounce leaves through **one of the six sides** and keeps going straight, up to **2 hexes**. You cannot turn.
-- Landing on another player: **Bounce** off them the same way, or **Bop** them (push up to 2 hexes in a straight line and steal 1 goo). Goo Armor makes the first bop against you each round steal nothing and push only 1 hex.
+- Landing on another player: **Bounce** off them the same way, or **Bop** them (push up to 2 hexes in a straight line). A bop steals 1 goo, or a random fruit from their tray. A bop that lands on another Blorp bumps that Blorp 1 hex in the same direction. Goo Armor makes the first bop against you each round steal nothing and push only 1 hex.
 - A pushed Blorp does not drop goo. They pick up fruit, slime, or a new crystal on the hex they land on. A slime picked up while pushed does not give a free bounce. Flying over a hex still leaves it behind.
 - Fruit stays in your tray when you **land** on it: apples and bananas **1** each, grapes **2**. It does not change your size. Flying over it leaves it behind. Nothing respawns.
 - Crystals are a shared **power-up deck**. Hop on a crystal you have not used and draw the top card. Each crystal works once per player. Every card you hold is worth **1 point**.
 - The tray at the bottom right lists your slimes, fruit, and cards with the points for each row. Add them up.
 - First to **10** points wins.
 
-Upgrades: **Zoomies** (first step can be a straight hop of 2 hexes; big Blorps still move 2), **Long Reach** (+1 move while smaller than size 6), **Treehopper** (bounce or bop over a tree), **Slip-n-Slide** (leaving water costs 1, even uphill), **Apple Fan** (+1 per apple in your tray), **Banana Bunch** (+1 per banana in your tray), **Grape Stomp** (+1 per grape in your tray), **Goo Armor** (first bop against you each round steals nothing and pushes 1), **Super Bounce** (bops and free bounces go 3 hexes). Every card is also worth 1 point.
+Upgrades: **Zoomies** (first step can be a straight hop of 2 hexes), **Long Reach** (+1 move while smaller than size 6), **Treehopper** (bounce or bop over a tree), **Slip-n-Slide** (leaving water costs 1, even uphill), **Apple Fan** (+1 per apple in your tray), **Banana Bunch** (+1 per banana in your tray), **Grape Stomp** (+1 per grape in your tray), **Goo Armor** (first bop against you each round steals nothing and pushes 1), **Super Bounce** (bops and free bounces go 3 hexes). Every card is also worth 1 point.
 
 ## Run locally
 

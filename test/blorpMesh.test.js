@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { makeBlorp } from "../src/meshes.js";
+import { makeBlorp, makeToken } from "../src/meshes.js";
 
 describe("slime mesh", () => {
   it("has a black top hat and no white dot on the crown", () => {
@@ -28,5 +28,15 @@ describe("slime mesh", () => {
       if (c.r < 0.95 || c.g < 0.95 || c.b < 0.95) return;
       assert.ok(obj.position.y < 0.22);
     });
+  });
+
+  it("lays a slime drop flat on the hex", () => {
+    const token = makeToken("#e6b325");
+    const box = new THREE.Box3().setFromObject(token);
+    const width = box.max.x - box.min.x;
+    const height = box.max.y - box.min.y;
+    assert.ok(width > 0.9);
+    assert.ok(height < 0.08);
+    assert.ok(box.min.y >= -0.001);
   });
 });

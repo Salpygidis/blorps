@@ -3,7 +3,7 @@ export const UPGRADES = {
     id: "zoomies",
     name: "Zoomies",
     emoji: "💨",
-    desc: "Your first move can be a straight hop of 2 hexes. Big Blorps still move 2.",
+    desc: "Your first move can be a straight hop of 2 hexes.",
   },
   treehopper: {
     id: "treehopper",

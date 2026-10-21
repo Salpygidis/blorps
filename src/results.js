@@ -52,6 +52,11 @@ export function describeResults(events = [], players = []) {
         emoji: "🌀",
         text: `Free bounce! ${playerName(players, ev.playerId)} ${freeBounceWhy(ev)}, so they can hop up to ${range} hex${range === 1 ? "" : "es"} in a straight line.`,
       });
+    } else if (ev.type === "handoff") {
+      lines.push({
+        emoji: "🫧",
+        text: `${playerName(players, ev.playerId)} handed a slime to ${playerName(players, ev.otherId)}.`,
+      });
     } else if (ev.type === "drop") {
       lines.push({
         emoji: "🫧",
@@ -83,18 +88,33 @@ export function describeResults(events = [], players = []) {
     } else if (ev.type === "bop") {
       const actor = playerName(players, ev.actorId);
       const target = playerName(players, ev.targetId);
+      if (ev.chain) {
+        lines.push({ emoji: "👊", text: `${target} got bumped 1 hex.` });
+        continue;
+      }
       const steal = events.find(
         (e) => e.type === "bopSteal" && e.actorId === ev.actorId && e.targetId === ev.targetId
       );
-      if (steal && steal.stolen > 0) {
+      if (steal?.fruit) {
+        const fruit = FRUIT[steal.fruit] || { label: steal.fruit, emoji: "🍓" };
+        lines.push({
+          emoji: fruit.emoji,
+          text: `${actor} bopped ${target} and took ${fruit.label}.`,
+        });
+      } else if (steal && steal.stolen > 0) {
         lines.push({
           emoji: "👊",
           text: `${actor} bopped ${target} and stole ${points(steal.stolen)}.`,
         });
-      } else if (steal && steal.stolen === 0) {
+      } else if (steal?.armored) {
         lines.push({
           emoji: "🛡️",
           text: `${actor} bopped ${target}, but ${target}'s armor held. No points stolen.`,
+        });
+      } else if (steal && steal.fruit === null) {
+        lines.push({
+          emoji: "👊",
+          text: `${actor} bopped ${target}, who had no fruit to take.`,
         });
       } else {
         lines.push({ emoji: "👊", text: `${actor} bopped ${target}.` });

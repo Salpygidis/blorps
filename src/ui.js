@@ -159,7 +159,7 @@ function turnLabel(state, cur, me) {
   const phase = state.ui?.kind;
   if (phase === "contact") {
     return you
-      ? `Bounce off ${state.ui.otherName} or bop them?`
+      ? `Bounce off ${state.ui.otherName}, or bop them for a slime${state.ui.fruitCount ? " or a fruit" : ""}?`
       : `${cur.name} bumped ${state.ui.otherName}`;
   }
   if (phase === "bounce") {
@@ -172,7 +172,7 @@ function turnLabel(state, cur, me) {
   if (phase === "bop") {
     const hops = state.ui.range === 1 ? "1 hex" : `${state.ui.range} hexes`;
     return you
-      ? `Push ${state.ui.otherName} up to ${hops} in a straight line`
+      ? `Push ${state.ui.otherName} up to ${hops} in a straight line. You'll take ${state.ui.steal === "fruit" ? "a fruit" : "a slime"}.`
       : `${cur.name} is bopping`;
   }
   if (phase === "upgrade") return you ? "You drew a power-up!" : `${cur.name} drew a card`;
@@ -313,9 +313,13 @@ function renderActions(state, me) {
   const kind = state.ui?.kind;
   if (kind === "contact") {
     els.actionBar.classList.remove("hidden");
+    const fruitBtn = state.ui?.fruitCount
+      ? `<button class="btn" data-act="bop-fruit" type="button">Bop for fruit</button>`
+      : "";
     els.actionBar.innerHTML = `
       <button class="btn primary" data-act="bounce" type="button">Bounce</button>
-      <button class="btn" data-act="bop" type="button">Bop</button>
+      <button class="btn" data-act="bop" type="button">Bop for slime</button>
+      ${fruitBtn}
     `;
     return;
   }
@@ -333,15 +337,15 @@ export function showHow() {
     <h2>How to play</h2>
     <p>You are a cute ooze. First to <strong>10 points</strong> wins. The tray at the bottom right is everything you are holding. Add it up.</p>
     <ul>
-      <li>Each slime you hold is <strong>1 point</strong> and is also your size. Start with 3. A random Blorp goes first and starts with one fewer slime. At size 6 you slow to 1 move. <strong>Zoomies</strong> lets your first step be a straight hop of 2 hexes, and big Blorps still move 2. <strong>Long Reach</strong> adds 1 move while you are smaller than size 6.</li>
+      <li>Each slime you hold is <strong>1 point</strong> and is also your size. Start with 3. A random Blorp goes first and starts with one fewer slime. A turn that starts at size 6 or bigger has 1 move. <strong>Zoomies</strong> lets that first step be a straight hop of 2 hexes. <strong>Long Reach</strong> adds 1 move while you are smaller than size 6.</li>
       <li>Hold the pointer on a hex for a second to see everything there, including a slime standing under a crystal.</li>
       <li>Stepping up onto a higher hex costs 2 moves, or 1 if you are size 6 or bigger. <strong>Slip-n-Slide</strong> leaves water for 1 move, even uphill.</li>
       <li>On your turn, tap a glowing hex. You may change direction between steps. A Zoomies hop flies straight over the hex in the middle.</li>
       <li>Trees block the way. You cannot move onto one or be pushed onto one. <strong>Treehopper</strong> lets a free bounce or a bop hop <em>over</em> a tree and land on a hex past it.</li>
-      <li>You <strong>must drop 1 goo</strong> on the first hex you land on.</li>
+      <li>You <strong>must drop 1 goo</strong> on the first hex you land on. If another Blorp is already there, you hand that slime to them instead of leaving a token.</li>
       <li>Land on a slime token (yours or theirs): it goes in your tray for <strong>1 point</strong> and a <strong>free bounce</strong>.</li>
       <li>A free bounce leaves through <strong>one of the six sides</strong> and keeps going straight, up to 2 hexes. You cannot turn.</li>
-      <li>Land on a player: <strong>Bounce</strong> off them the same way, or <strong>Bop</strong> them up to 2 hexes in a straight line and steal 1 goo. <strong>Goo Armor</strong> makes the first bop against you each round steal nothing and push only 1 hex.</li>
+      <li>Land on a player: <strong>Bounce</strong> off them the same way, or <strong>Bop</strong> them up to 2 hexes in a straight line. Choose to steal 1 goo, or a random fruit from their tray. If that push lands on another Blorp, they get bumped 1 hex the same way. <strong>Goo Armor</strong> makes the first bop against you each round steal nothing and push only 1 hex.</li>
       <li>If you are pushed onto a hex, you do not drop goo. You do pick up fruit, slime, or a new crystal there. A slime you pick up while being pushed does not give a free bounce.</li>
       <li>Apples and bananas in your tray are <strong>1 point</strong>. Grapes are <strong>2</strong>. Fruit does not change your size. Flying over it leaves it behind.</li>
       <li>Every power-up you hold is <strong>1 point</strong>. <strong>Apple Fan</strong>, <strong>Banana Bunch</strong>, and <strong>Grape Stomp</strong> also add +1 for each of that fruit in your tray.</li>
