@@ -29,7 +29,7 @@
           <p class="eyebrow">hex slime racing</p>
           <h1>Blorps</h1>
           <p class="lede">
-            Race to 10 points. Your slimes, fruit, and cards sit in a tray so you can count them. Bigger slimes are slower.
+            Race to 10 points. Your slimes, fruit, and cards sit in a tray so you can count them. At 6 points you slow down.
           </p>
 
           <label class="field">
@@ -76,15 +76,15 @@
           <ul id="wait-list" class="wait-list"></ul>
           <div id="bot-row" class="bot-row hidden">
             <span>Bots</span>
-            <button id="btn-bots-0" class="btn tiny" type="button">0</button>
-            <button id="btn-bots-1" class="btn tiny" type="button">1</button>
-            <button id="btn-bots-2" class="btn tiny" type="button">2</button>
+            <button id="btn-bots-less" class="btn tiny" type="button" aria-label="Fewer bots">−</button>
+            <strong id="bot-count">0</strong>
+            <button id="btn-bots-more" class="btn tiny" type="button" aria-label="More bots">+</button>
           </div>
           <div class="row-btns">
             <button id="btn-start" class="btn primary hidden" type="button">Start race</button>
             <button id="btn-leave" class="btn ghost" type="button">Leave</button>
           </div>
-          <p class="hint">Add 1 or 2 bots to race solo, or share the code with friends. 2–4 players total.</p>
+          <p class="hint">Add bots or share the code. 2–4 players use one foundation, 5–8 use two, and 9–12 use four.</p>
         </div>
       </section>
 
@@ -108,11 +108,13 @@
         <aside class="scoreboard" id="scoreboard"></aside>
         <aside id="inventory" class="inventory" aria-live="polite" aria-label="Your items"></aside>
 
-        <aside id="feed" class="feed" aria-live="polite" aria-label="Race history"></aside>
+        <div id="feed-dock" class="feed-dock">
+          <button id="feed-toggle" class="feed-toggle" type="button" aria-controls="feed" aria-expanded="false" hidden>Notes</button>
+          <aside id="feed" class="feed" aria-live="polite" aria-label="Race history"></aside>
+        </div>
 
         <footer class="hud-bottom">
           <div id="action-bar" class="action-bar hidden"></div>
-          <div id="dir-pad" class="dir-pad hidden"></div>
           <button id="btn-end" class="btn end-btn hidden" type="button">End turn</button>
         </footer>
       </section>

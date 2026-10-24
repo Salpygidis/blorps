@@ -28,7 +28,8 @@ describe("hex hover tip", () => {
       "a"
     );
     const text = lines.map((line) => line.text).join(" ");
-    assert.match(text, /Open ground/);
+    assert.match(text, /Crystal pool/);
+    assert.match(text, /The crystals stay on the tile/);
     assert.match(text, /Apple\. Worth 1 point/);
     assert.match(text, /Goo's slime drop/);
     assert.match(text, /free bounce/);
@@ -36,6 +37,7 @@ describe("hex hover tip", () => {
     assert.match(text, /Pip is standing here/);
     assert.match(text, /Zoomies/);
     assert.match(text, /4 points/);
+    assert.doesNotMatch(text, /Size /);
   });
 
   it("describes water, height, and an unused crystal", () => {
@@ -45,14 +47,14 @@ describe("hex hover tip", () => {
       1,
       "a"
     );
-    assert.match(water[0].text, /pays 2 to leave/);
+    assert.match(water[0].text, /Under 6 points, leaving costs 2/);
     const hill = describeHex(
       { hexes: [{ q: 2, r: 0, terrain: "open", elevation: 1 }] },
       2,
       0,
       "a"
     );
-    assert.match(hill[0].text, /2 moves to step up/);
+    assert.match(hill[0].text, /stepping up costs 2 moves/);
     const crystal = describeHex(
       {
         hexes: [{ q: 3, r: 0, terrain: "open", elevation: 0 }],

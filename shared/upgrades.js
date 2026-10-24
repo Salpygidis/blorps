@@ -15,7 +15,7 @@ export const UPGRADES = {
     id: "slider",
     name: "Slip-n-Slide",
     emoji: "🌊",
-    desc: "Leaving water costs 1 move, even when that step is uphill.",
+    desc: "While you have fewer than 6 points, leaving water costs 1 move, even uphill.",
   },
   superbounce: {
     id: "superbounce",
@@ -51,7 +51,7 @@ export const UPGRADES = {
     id: "longreach",
     name: "Long Reach",
     emoji: "🦵",
-    desc: "While you are smaller than size 6, base movement +1.",
+    desc: "While you have fewer than 6 points, base movement +1.",
   },
 };
 

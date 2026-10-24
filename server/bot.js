@@ -1,6 +1,18 @@
 import { distance } from "../shared/hex.js";
 
-export const BOT_NAMES = ["Beep", "Blip"];
+export const BOT_NAMES = [
+  "Beep",
+  "Blip",
+  "Bloop",
+  "Zig",
+  "Zag",
+  "Squish",
+  "Pop",
+  "Fizz",
+  "Gulp",
+  "Nib",
+  "Oz",
+];
 
 export function chooseBotAction(game) {
   const p = game.current();

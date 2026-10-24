@@ -5,7 +5,6 @@ import {
   makeBlorp,
   makeFruit,
   makeToken,
-  makeCapture,
   makeHighlight,
   tileDepth,
   useBoardModels,
@@ -43,9 +42,6 @@ export class GameScene {
     this.target = new THREE.Vector3();
     this.look = new THREE.Vector3();
     this.spherical = { theta: 0.55, phi: 0.92, r: 16 };
-    this.dragging = false;
-    this.moved = false;
-    this.last = { x: 0, y: 0 };
     this.pointers = new Map();
     this.pinch0 = 0;
     this.hoverKey = "";
@@ -149,7 +145,7 @@ export class GameScene {
       { q: 1, r: -1, terrain: "open", elevation: 0 },
     ];
     if (this.models) layoutBoard(demo);
-    this.addFoundation();
+    this.addFoundations();
     for (const h of demo) this.addHex(h);
     const a = makeBlorp("#7adf4a");
     const b = makeBlorp("#ff6b9d");
@@ -185,19 +181,32 @@ export class GameScene {
     this.highlights = [];
   }
 
-  addFoundation() {
+  addFoundations(origins) {
     const layout = this.models?.layout;
     if (!layout) return;
-    // Pose measured in boardFit: +30° yaw turns the plate's flat-top hexes
-    // into the game's pointy-top grid, at the same centers as hexToWorld.
-    const base = new THREE.Mesh(this.models.foundation, this.models.foundationMat);
-    base.rotation.y = layout.yaw;
-    base.scale.setScalar(layout.scale);
-    base.position.set(layout.x, 0, layout.z);
-    base.receiveShadow = true;
-    base.castShadow = false;
-    base.userData.kind = "foundation";
-    this.scene.add(base);
+    const plates = origins?.length ? origins : [{ q: 0, r: 0 }];
+    for (const origin of plates) {
+      const { x, z } = hexToWorld(origin.q || 0, origin.r || 0);
+      // Pose measured in boardFit: +30° yaw turns the plate's flat-top hexes
+      // into the game's pointy-top grid. Each extra plate sits on its own center.
+      const base = new THREE.Mesh(this.models.foundation, this.models.foundationMat);
+      base.rotation.y = layout.yaw;
+      base.scale.setScalar(layout.scale);
+      base.position.set(layout.x + x, 0, layout.z + z);
+      base.receiveShadow = true;
+      base.castShadow = false;
+      base.renderOrder = 1;
+      base.userData.kind = "foundation";
+      if (this.models.foundationTop && this.models.grassTopMat) {
+        const grass = new THREE.Mesh(this.models.foundationTop, this.models.grassTopMat);
+        grass.renderOrder = 2;
+        grass.castShadow = false;
+        grass.receiveShadow = false;
+        grass.raycast = () => {};
+        base.add(grass);
+      }
+      this.scene.add(base);
+    }
   }
 
   addHex(hex) {
@@ -211,6 +220,30 @@ export class GameScene {
       div.position.set(x, tileDepth(hex) + 0.02, z);
       this.scene.add(div);
     }
+  }
+
+  fitBoard(hexes) {
+    let max = 0;
+    for (const h of hexes || []) {
+      const { x, z } = hexToWorld(h.q, h.r);
+      max = Math.max(max, Math.hypot(x, z));
+    }
+    const span = max + 10;
+    if (this.ground) this.ground.scale.setScalar(Math.max(1, span / 18));
+    const wide = (hexes || []).length > 40;
+    this.scene.fog.near = wide ? 30 : 22;
+    this.scene.fog.far = wide ? Math.max(110, span * 5) : 48;
+    if (this.sun?.shadow?.camera) {
+      const half = Math.max(14, span);
+      const cam = this.sun.shadow.camera;
+      cam.left = -half;
+      cam.right = half;
+      cam.top = half;
+      cam.bottom = -half;
+      cam.far = Math.max(40, half * 3);
+      cam.updateProjectionMatrix();
+    }
+    return clamp(span * 1.05, this.isMobile() ? 18 : 15, 48);
   }
 
   hexRecord(q, r) {
@@ -288,10 +321,22 @@ export class GameScene {
     this.epoch++;
     this.clearBoard();
     this.mode = "play";
-    this.addFoundation();
-    for (const h of state.hexes) this.addHex(h);
+    this.addFoundations(state.foundations);
+    const fit = this.fitBoard(state.hexes);
+    const pools = new Set((state.captures || []).map((c) => key(c.q, c.r)));
+    for (const h of state.hexes) {
+      if (
+        pools.has(key(h.q, h.r)) &&
+        h.terrain !== "tree" &&
+        h.terrain !== "water" &&
+        !(h.elevation > 0)
+      ) {
+        h.pool = true;
+      }
+      this.addHex(h);
+    }
     this.syncEntities(state, true);
-    this.spherical = { theta: 0.55, phi: 0.9, r: this.isMobile() ? 18 : 15 };
+    this.spherical = { theta: 0.55, phi: 0.9, r: fit };
     this.follow(state, true);
   }
 
@@ -313,20 +358,18 @@ export class GameScene {
       this.placeCollectible(m, t.q, t.r, 0.02);
     });
 
-    this.syncMap(this.captures, state.captures || [], () => {
-      const m = makeCapture();
-      this.scene.add(m);
-      return m;
-    }, (m, c) => {
-      this.placeCollectible(m, c.q, c.r, 0.02);
-      const spent = (c.claimedBy || []).includes(this.localId);
-      m.userData.spent = spent;
-      const crystal = m.userData.crystal;
-      if (crystal?.material) {
-        crystal.material.opacity = spent ? 0.28 : 0.92;
-        crystal.material.emissiveIntensity = spent ? 0.05 : 0.5;
-      }
-    });
+    this.syncCrystalPools(state);
+  }
+
+  syncCrystalPools(state) {
+    const spent = new Set();
+    for (const cap of state.captures || []) {
+      if ((cap.claimedBy || []).includes(this.localId)) spent.add(key(cap.q, cap.r));
+    }
+    for (const [id, rec] of this.hexes) {
+      if (!rec.mesh.userData.crystalMat) continue;
+      rec.mesh.userData.crystalSpent = spent.has(id);
+    }
   }
 
   syncEntities(state, snap = false) {
@@ -335,8 +378,9 @@ export class GameScene {
       this.scene.add(m);
       return m;
     }, (m, p) => {
-      this.placeOnHex(m, p.q, p.r, this.hexRecord(p.q, p.r)?.hex, blorpLift(p.slime));
-      const s = blorpScale(p.slime);
+      const points = bodyPoints(p);
+      this.placeOnHex(m, p.q, p.r, this.hexRecord(p.q, p.r)?.hex, blorpLift(points));
+      const s = blorpScale(points);
       m.scale.setScalar(s);
       m.userData.playerId = p.id;
       m.userData.q = p.q;
@@ -500,20 +544,27 @@ export class GameScene {
 
   bindInput() {
     const el = this.canvas;
+    el.addEventListener("contextmenu", (e) => e.preventDefault());
     el.addEventListener("pointerdown", (e) => {
+      const mouse = e.pointerType === "mouse";
+      if (mouse && e.button !== 0 && e.button !== 2) return;
+      // Mouse spins with the right button. Touch and pen still drag to spin.
+      const orbit = !mouse || e.button === 2;
+      const pick = !mouse || e.button === 0;
       el.setPointerCapture(e.pointerId);
-      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      this.dragging = true;
-      this.moved = false;
-      this.last = { x: e.clientX, y: e.clientY };
-      clearTimeout(this.pressTimer);
-      this.pressTimer = setTimeout(() => {
-        if (this.moved) return;
-        const hex = this.hexAtPointer(this.last.x, this.last.y);
-        if (!hex) return;
-        this.moved = true;
-        this.showHexTip(hex.q, hex.r, this.last.x, this.last.y);
-      }, 1000);
+      const rec = { x: e.clientX, y: e.clientY, orbit, pick, moved: false };
+      this.pointers.set(e.pointerId, rec);
+      if (pick) {
+        clearTimeout(this.pressTimer);
+        this.pressTimer = setTimeout(() => {
+          const held = this.pointers.get(e.pointerId);
+          if (!held || held.moved) return;
+          const hex = this.hexAtPointer(held.x, held.y);
+          if (!hex) return;
+          held.moved = true;
+          this.showHexTip(hex.q, hex.r, held.x, held.y);
+        }, 1000);
+      }
       if (this.pointers.size === 2) {
         const [a, b] = [...this.pointers.values()];
         this.pinch0 = Math.hypot(a.x - b.x, a.y - b.y);
@@ -522,8 +573,12 @@ export class GameScene {
     el.addEventListener("pointermove", (e) => {
       if (e.buttons === 0) this.trackHover(e.clientX, e.clientY);
       else clearTimeout(this.hoverTimer);
-      if (!this.pointers.has(e.pointerId)) return;
-      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const rec = this.pointers.get(e.pointerId);
+      if (!rec) return;
+      const dx = e.clientX - rec.x;
+      const dy = e.clientY - rec.y;
+      rec.x = e.clientX;
+      rec.y = e.clientY;
       if (this.pointers.size === 2) {
         const [a, b] = [...this.pointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
@@ -534,21 +589,18 @@ export class GameScene {
         }
         return;
       }
-      if (!this.dragging) return;
-      const dx = e.clientX - this.last.x;
-      const dy = e.clientY - this.last.y;
-      if (Math.hypot(dx, dy) > 6) this.moved = true;
-      this.last = { x: e.clientX, y: e.clientY };
+      if (Math.hypot(dx, dy) > 6) rec.moved = true;
+      if (!rec.orbit) return;
       this.spherical.theta -= dx * 0.005;
       this.spherical.phi = clamp(this.spherical.phi - dy * 0.004, 0.45, 1.25);
     });
     const up = (e) => {
       clearTimeout(this.pressTimer);
-      if (this.dragging && !this.moved && this.pointers.size <= 1) {
+      const rec = this.pointers.get(e.pointerId);
+      if (rec?.pick && !rec.moved && this.pointers.size <= 1) {
         this.pick(e.clientX, e.clientY);
       }
       this.pointers.delete(e.pointerId);
-      if (!this.pointers.size) this.dragging = false;
     };
     el.addEventListener("pointerleave", () => this.cancelHover(true));
     el.addEventListener("pointerup", up);
@@ -706,10 +758,10 @@ export class GameScene {
         e.lookAt(this.camera.position);
       }
     }
-    for (const cap of this.captures.values()) {
-      if (cap.userData.crystal) {
-        cap.userData.crystal.rotation.y = t * (cap.userData.spent ? 0.2 : 0.9);
-      }
+    for (const rec of this.hexes.values()) {
+      const mat = rec.mesh.userData.crystalMat;
+      if (!mat) continue;
+      mat.color.setHex(rec.mesh.userData.crystalSpent ? 0x7a7a7a : 0xffffff);
     }
     for (const [i, h] of this.highlights.entries()) {
       h.position.y += Math.sin(t * 4 + i) * 0.0008;
@@ -748,12 +800,18 @@ function hexTileOf(obj) {
   return null;
 }
 
-function blorpScale(slime) {
-  return 0.72 + Math.min(slime, 12) * 0.08;
+function bodyPoints(player) {
+  const points = Number(player?.score);
+  if (Number.isFinite(points)) return points;
+  return player?.slime || 0;
 }
 
-function blorpLift(slime) {
-  return 0.22 + Math.min(slime, 12) * 0.03;
+function blorpScale(points) {
+  return 0.72 + Math.min(points, 12) * 0.08;
+}
+
+function blorpLift(points) {
+  return 0.22 + Math.min(points, 12) * 0.03;
 }
 
 function offsetStack(mesh, player, all) {

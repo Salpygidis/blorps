@@ -1,15 +1,15 @@
 # Blorps
 
-A family-friendly hex slime racing game. Grow by eating fruit and slurping goo, bounce off friends, and race to **10 slime points**. Getting bigger makes you slower.
+A family-friendly hex slime racing game. Grow by eating fruit and slurping goo, bounce off friends, and race to **10 points**. At 6 points you slow down.
 
 Play in the browser on a desktop or phone. No accounts — just a short room code.
 
 ## How a room works
 
 1. One person opens the game and clicks **Create room**. They get a 4-character code (for example `K7QM`).
-2. Race solo with **Play vs 1 bot** or **Play vs 2 bots**, or wait for friends to join with the code. The host can also set bots to 0, 1, or 2 in the waiting room.
+2. Race solo with **Play vs 1 bot** or **Play vs 2 bots**, or wait for friends to join with the code. The host can add more bots in the waiting room, up to 12 racers.
 3. Everyone else can **Join** with the code. Check **Join as spectator** to watch without playing.
-4. The host clicks **Start race** once 2–4 players (humans and/or bots) are in.
+4. The host clicks **Start race** once 2–12 players (humans and/or bots) are in. 2–4 players get one foundation, 5–8 get two adjacent foundations, and 9–12 get four in a row.
 5. Late arrivals can still join the same code as spectators and see the live board.
 
 Bots take their own turns: they go for fruit, crystals, slime tokens, and will bop you if they land on you.
@@ -18,21 +18,21 @@ Room state lives in the Node process memory. If the server restarts or sleeps, o
 
 ## Rules (short)
 
-- Start at size 3 with a 2-hex move. A random player goes first and starts with **1 less point** (one fewer slime). At size **6** your turn starts with **1** move. Stepping up onto a higher hex costs **2** moves, or **1** if you are size 6 or bigger.
+- Start with 3 slime and a 2-hex move. A random player goes first and starts with **1 less point** (one fewer slime). A turn that starts at **6 points** or more has **1** move. Stepping up onto a higher hex costs **2** moves, or **1** if you have 6 points or more.
 - Hold the pointer on a hex for a second to read everything on it.
 - On your turn, tap a glowing hex. You may change direction between steps.
 - Trees block movement. You cannot stop on a tree or be bopped onto one. Treehopper lets a free bounce or a bop hop over a tree and land on a hex past it.
-- You **must drop 1 slime** on the first hex you land on. If another player is already on that hex, you hand them the slime instead of leaving a token. Each slime you still hold is **1 point** and is also your size.
+- Your first move **leaves 1 slime** on the hex you started from. You cannot jump back onto that hex during this turn. Each slime you still hold is **1 point**.
 - Landing on a slime token (yours or anyone’s) puts it in your tray for **1 point** and gives a **free bounce**.
 - A free bounce leaves through **one of the six sides** and keeps going straight, up to **2 hexes**. You cannot turn.
 - Landing on another player: **Bounce** off them the same way, or **Bop** them (push up to 2 hexes in a straight line). A bop steals 1 goo, or a random fruit from their tray. A bop that lands on another Blorp bumps that Blorp 1 hex in the same direction. Goo Armor makes the first bop against you each round steal nothing and push only 1 hex.
 - A pushed Blorp does not drop goo. They pick up fruit, slime, or a new crystal on the hex they land on. A slime picked up while pushed does not give a free bounce. Flying over a hex still leaves it behind.
-- Fruit stays in your tray when you **land** on it: apples and bananas **1** each, grapes **2**. It does not change your size. Flying over it leaves it behind. Nothing respawns.
-- Crystals are a shared **power-up deck**. Hop on a crystal you have not used and draw the top card. Each crystal works once per player. Every card you hold is worth **1 point**.
+- Fruit stays in your tray when you **land** on it: apples and bananas **1** each, grapes **2**. Flying over it leaves it behind. Nothing respawns.
+- Crystal pools are liquid tiles with a crystal print. They are a shared **power-up deck**. Hop on one you have not used and draw the top card. The pool stays on the board. Each pool works once per player. Every card you hold is worth **1 point**.
 - The tray at the bottom right lists your slimes, fruit, and cards with the points for each row. Add them up.
 - First to **10** points wins.
 
-Upgrades: **Zoomies** (first step can be a straight hop of 2 hexes), **Long Reach** (+1 move while smaller than size 6), **Treehopper** (bounce or bop over a tree), **Slip-n-Slide** (leaving water costs 1, even uphill), **Apple Fan** (+1 per apple in your tray), **Banana Bunch** (+1 per banana in your tray), **Grape Stomp** (+1 per grape in your tray), **Goo Armor** (first bop against you each round steals nothing and pushes 1), **Super Bounce** (bops and free bounces go 3 hexes). Every card is also worth 1 point.
+Upgrades: **Zoomies** (first step can be a straight hop of 2 hexes), **Long Reach** (+1 move while you have fewer than 6 points), **Treehopper** (bounce or bop over a tree), **Slip-n-Slide** (under 6 points, leaving water costs 1, even uphill), **Apple Fan** (+1 per apple in your tray), **Banana Bunch** (+1 per banana in your tray), **Grape Stomp** (+1 per grape in your tray), **Goo Armor** (first bop against you each round steals nothing and pushes 1), **Super Bounce** (bops and free bounces go 3 hexes). Every card is also worth 1 point.
 
 ## Run locally
 

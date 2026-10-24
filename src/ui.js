@@ -23,9 +23,9 @@ export const els = {
   btnJoin: $("btn-join"),
   btnHow: $("btn-how"),
   botRow: $("bot-row"),
-  btnBots0: $("btn-bots-0"),
-  btnBots1: $("btn-bots-1"),
-  btnBots2: $("btn-bots-2"),
+  btnBotsLess: $("btn-bots-less"),
+  btnBotsMore: $("btn-bots-more"),
+  botCount: $("bot-count"),
   btnStart: $("btn-start"),
   btnLeave: $("btn-leave"),
   btnCopy: $("btn-copy"),
@@ -36,9 +36,10 @@ export const els = {
   turnText: $("turn-text"),
   scoreboard: $("scoreboard"),
   inventory: $("inventory"),
+  feedDock: $("feed-dock"),
+  feedToggle: $("feed-toggle"),
   feed: $("feed"),
   actionBar: $("action-bar"),
-  dirPad: $("dir-pad"),
   btnEnd: $("btn-end"),
   btnMute: $("btn-mute"),
   btnHelp: $("btn-help"),
@@ -92,20 +93,43 @@ export function toast(msg) {
 let feedRoom = "";
 let feedVersion = -1;
 
+const feedDrawerQuery = window.matchMedia("(max-width: 720px)");
+
+function feedIsDrawer() {
+  return feedDrawerQuery.matches;
+}
+
+function syncFeedToggle() {
+  if (!els.feed || !els.feedToggle || !els.feedDock) return;
+  const count = els.feed.childElementCount;
+  const drawer = feedIsDrawer();
+  const open = els.feedDock.classList.contains("open");
+  els.feedToggle.hidden = !drawer || count === 0;
+  els.feedToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  els.feedToggle.textContent = open ? "Hide notes" : `Notes (${count})`;
+  if (drawer && !open) els.feed.setAttribute("inert", "");
+  else els.feed.removeAttribute("inert");
+  if (!drawer) els.feedDock.classList.remove("open");
+}
+
 export function prepareFeed(state) {
   if (!els.feed || !state) return;
   const fresh = state.roomCode !== feedRoom || state.version < feedVersion;
   if (fresh) {
     els.feed.replaceChildren();
+    els.feedDock?.classList.remove("open");
+    els.feedToggle?.classList.remove("fresh");
     feedRoom = state.roomCode || "";
   }
   feedVersion = state.version ?? 0;
+  syncFeedToggle();
 }
 
 export function showResults(lines) {
   if (!els.feed || !lines?.length) return;
   for (const row of els.feed.querySelectorAll(".fresh")) row.classList.remove("fresh");
   const nearBottom = els.feed.scrollHeight - els.feed.scrollTop - els.feed.clientHeight < 48;
+  const closedDrawer = feedIsDrawer() && !els.feedDock?.classList.contains("open");
   for (const line of lines) {
     const row = document.createElement("article");
     row.className = "result-line fresh";
@@ -113,6 +137,22 @@ export function showResults(lines) {
     els.feed.appendChild(row);
   }
   if (nearBottom) els.feed.scrollTop = els.feed.scrollHeight;
+  if (closedDrawer) els.feedToggle?.classList.add("fresh");
+  syncFeedToggle();
+}
+
+if (els.feedToggle && els.feedDock) {
+  els.feedToggle.addEventListener("click", () => {
+    els.feedDock.classList.toggle("open");
+    if (els.feedDock.classList.contains("open")) {
+      els.feedToggle.classList.remove("fresh");
+      requestAnimationFrame(() => {
+        els.feed.scrollTop = els.feed.scrollHeight;
+      });
+    }
+    syncFeedToggle();
+  });
+  feedDrawerQuery.addEventListener("change", syncFeedToggle);
 }
 
 export function renderLobbyList(lobby, meId) {
@@ -228,11 +268,10 @@ function playerCard(p, state) {
   const pips = Array.from({ length: 10 }, (_, i) => `<i class="${i < score ? "on" : ""}"></i>`).join("");
   const ups = (p.upgrades || []).map((u) => u.emoji).join(" ");
   const mark = p.isBot ? " 🤖" : p.connected ? "" : " (away)";
-  const extras = [`size ${p.slime}`, ups].filter(Boolean).join(" · ");
   return `<article class="player-card${current}${open}" data-id="${escapeHtml(p.id)}" tabindex="0" style="border-left-color:${p.color.hex};color:${p.color.hex}">
     <div class="who"><span>${escapeHtml(p.name)}${mark}</span><span>${score}</span></div>
     <div class="pips">${pips}</div>
-    <div class="up-row">${extras}</div>
+    <div class="up-row">${ups}</div>
     ${powerupPopup(p.upgrades)}
   </article>`;
 }
@@ -305,7 +344,6 @@ if (els.scoreboard) {
 function renderActions(state, me) {
   const mine = me && !me.isSpectator && me.id === state.turnPlayerId && state.status === "playing";
   els.actionBar.classList.add("hidden");
-  els.dirPad.classList.add("hidden");
   els.btnEnd.classList.add("hidden");
   els.actionBar.innerHTML = "";
   if (!mine) return;
@@ -324,11 +362,7 @@ function renderActions(state, me) {
     return;
   }
   if (kind === "move") {
-    els.dirPad.classList.remove("hidden");
     els.btnEnd.classList.toggle("hidden", !state.ui.canEnd);
-  }
-  if (kind === "bounce" || kind === "bop") {
-    els.dirPad.classList.remove("hidden");
   }
 }
 
@@ -337,21 +371,21 @@ export function showHow() {
     <h2>How to play</h2>
     <p>You are a cute ooze. First to <strong>10 points</strong> wins. The tray at the bottom right is everything you are holding. Add it up.</p>
     <ul>
-      <li>Each slime you hold is <strong>1 point</strong> and is also your size. Start with 3. A random Blorp goes first and starts with one fewer slime. A turn that starts at size 6 or bigger has 1 move. <strong>Zoomies</strong> lets that first step be a straight hop of 2 hexes. <strong>Long Reach</strong> adds 1 move while you are smaller than size 6.</li>
-      <li>Hold the pointer on a hex for a second to see everything there, including a slime standing under a crystal.</li>
-      <li>Stepping up onto a higher hex costs 2 moves, or 1 if you are size 6 or bigger. <strong>Slip-n-Slide</strong> leaves water for 1 move, even uphill.</li>
+      <li>Each slime you hold is <strong>1 point</strong>. Start with 3. A random Blorp goes first and starts with one fewer slime. A turn that starts at <strong>6 points</strong> or more has 1 move. <strong>Zoomies</strong> lets that first step be a straight hop of 2 hexes. <strong>Long Reach</strong> adds 1 move while you have fewer than 6 points.</li>
+      <li>Hold the pointer on a hex for a second to see everything there, including a slime standing on a crystal pool.</li>
+      <li>Stepping up onto a higher hex costs 2 moves, or 1 if you have <strong>6 points</strong> or more. <strong>Slip-n-Slide</strong> leaves water for 1 move while you have fewer than 6 points, even uphill.</li>
       <li>On your turn, tap a glowing hex. You may change direction between steps. A Zoomies hop flies straight over the hex in the middle.</li>
       <li>Trees block the way. You cannot move onto one or be pushed onto one. <strong>Treehopper</strong> lets a free bounce or a bop hop <em>over</em> a tree and land on a hex past it.</li>
-      <li>You <strong>must drop 1 goo</strong> on the first hex you land on. If another Blorp is already there, you hand that slime to them instead of leaving a token.</li>
+      <li>Your first move <strong>leaves 1 goo</strong> on the hex you started from. You cannot jump back onto that hex during this turn.</li>
       <li>Land on a slime token (yours or theirs): it goes in your tray for <strong>1 point</strong> and a <strong>free bounce</strong>.</li>
       <li>A free bounce leaves through <strong>one of the six sides</strong> and keeps going straight, up to 2 hexes. You cannot turn.</li>
       <li>Land on a player: <strong>Bounce</strong> off them the same way, or <strong>Bop</strong> them up to 2 hexes in a straight line. Choose to steal 1 goo, or a random fruit from their tray. If that push lands on another Blorp, they get bumped 1 hex the same way. <strong>Goo Armor</strong> makes the first bop against you each round steal nothing and push only 1 hex.</li>
       <li>If you are pushed onto a hex, you do not drop goo. You do pick up fruit, slime, or a new crystal there. A slime you pick up while being pushed does not give a free bounce.</li>
-      <li>Apples and bananas in your tray are <strong>1 point</strong>. Grapes are <strong>2</strong>. Fruit does not change your size. Flying over it leaves it behind.</li>
+      <li>Apples and bananas in your tray are <strong>1 point</strong>. Grapes are <strong>2</strong>. Flying over fruit leaves it behind.</li>
       <li>Every power-up you hold is <strong>1 point</strong>. <strong>Apple Fan</strong>, <strong>Banana Bunch</strong>, and <strong>Grape Stomp</strong> also add +1 for each of that fruit in your tray.</li>
-      <li>Land on a crystal you have not used yet and draw the top card of the power-up deck. Each crystal works once for you.</li>
+      <li>A crystal pool is a liquid tile with crystals printed on it. Land on one you have not used yet and draw the top card. The pool stays on the board, so other pieces can sit on it. Each pool works once for you.</li>
     </ul>
-    <p>Race solo with <strong>1 or 2 bots</strong>, or share a room code. Spectators watch the board live.</p>
+    <p>Race solo with bots, or share a room code. Up to <strong>12</strong> racers. One foundation holds 2–4, two foundations hold 5–8, and four foundations hold 9–12. Spectators watch the board live.</p>
     <button class="btn primary" id="close-modal" type="button">Got it</button>
   `;
   els.modal.classList.remove("hidden");
@@ -379,20 +413,10 @@ export function showCard(card, deckRemaining) {
   els.modal.classList.remove("hidden");
 }
 
-export function announceFreeBounce(name, ev = {}) {
+export function announceFreeBounce() {
   if (!els.announce) return;
   sfx("freebounce");
-  const range = ev.range ?? 2;
-  const hops = range === 1 ? "1 hex" : `${range} hexes`;
-  const why = freeBounceWhy(ev);
-  const lead = why.charAt(0).toUpperCase() + why.slice(1);
-  els.announce.innerHTML = `
-    <div class="announce-card">
-      <strong>Free bounce!</strong>
-      <span>${escapeHtml(lead)}</span>
-      <span>${escapeHtml(name)} · up to ${hops} in a straight line</span>
-    </div>
-  `;
+  els.announce.innerHTML = `<div class="announce-card"><strong>free bounce</strong></div>`;
   els.announce.classList.remove("show");
   void els.announce.offsetWidth;
   els.announce.classList.add("show");
@@ -423,9 +447,4 @@ export function escapeHtml(s) {
   );
 }
 
-export function buildDirPad() {
-  const arrows = ["▲", "◥", "◢", "▼", "◣", "◤"];
-  els.dirPad.innerHTML = arrows
-    .map((a, i) => `<button type="button" data-dir="${i}" aria-label="Move ${i}">${a}</button>`)
-    .join("");
-}
+

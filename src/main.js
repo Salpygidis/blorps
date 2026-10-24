@@ -1,7 +1,7 @@
-import { DIRS, onFaceLine } from "../shared/hex.js";
+import { onFaceLine } from "../shared/hex.js";
 import { socket, emit } from "./net.js";
 import { GameScene } from "./scene.js";
-import { sfx, setMuted, isMuted, unlockAudio } from "./audio.js";
+import { sfx, setMuted, isMuted, unlockAudio, setMatchMusic } from "./audio.js";
 import {
   els,
   randomName,
@@ -13,7 +13,6 @@ import {
   showCard,
   showWin,
   hideModal,
-  buildDirPad,
 } from "./ui.js";
 
 const canvas = document.getElementById("view");
@@ -28,7 +27,6 @@ const session = {
 };
 
 els.name.value = session.name || randomName();
-buildDirPad();
 
 let lastState = null;
 let lastLobby = null;
@@ -51,9 +49,8 @@ els.btnCreate.onclick = () => join(true);
 els.btnVs1.onclick = () => join(true, { bots: 1 });
 els.btnVs2.onclick = () => join(true, { bots: 2 });
 els.btnJoin.onclick = () => join(false);
-els.btnBots0.onclick = () => setBots(0);
-els.btnBots1.onclick = () => setBots(1);
-els.btnBots2.onclick = () => setBots(2);
+els.btnBotsLess.onclick = () => setBots(Math.max(0, botCount(lastLobby) - 1));
+els.btnBotsMore.onclick = () => setBots(botCount(lastLobby) + 1);
 els.btnHow.onclick = showHow;
 els.btnHelp.onclick = showHow;
 els.btnLeave.onclick = () => location.reload();
@@ -87,14 +84,6 @@ els.actionBar.addEventListener("click", (e) => {
   emit("game:contact", { action: btn.dataset.act }).then((res) => {
     if (res.error) toast(res.error);
   });
-});
-
-els.dirPad.addEventListener("click", (e) => {
-  const btn = e.target.closest("[data-dir]");
-  if (!btn || !lastState) return;
-  const i = Number(btn.dataset.dir);
-  const dest = hexInDirection(i);
-  if (dest) scene.onHex(dest.q, dest.r);
 });
 
 els.modal.addEventListener("click", (e) => {
@@ -145,6 +134,7 @@ socket.on("state", ({ lobby, state, events }) => {
     isSpectator: session.isSpectator || lobby.players.find((p) => p.id === session.playerId)?.isSpectator,
   };
   if (state.status === "playing" || state.status === "finished") {
+    setMatchMusic(true);
     showScreen("hud");
     renderHud(state, {
       ...me,
@@ -167,24 +157,27 @@ socket.on("connect_error", () => toast("Can't reach the Blorps server"));
 
 function enterWaiting(lobby) {
   if (!lobby) return;
+  setMatchMusic(false);
   showScreen("waiting");
   renderLobbyList(lobby, session.playerId);
   const me = lobby.players.find((p) => p.id === session.playerId);
   session.isHost = me && me.id === lobby.hostId;
   session.isSpectator = !!me?.isSpectator;
-  const botCount = lobby.players.filter((p) => p.isBot).length;
+  const bots = botCount(lobby);
   els.waitRole.textContent = session.isSpectator
     ? "You are watching."
     : session.isHost
-      ? botCount
+      ? bots
         ? "Start whenever you’re ready — bots will take their own turns."
         : "Add a bot to race solo, or share the code with friends."
       : "Waiting for the host to start.";
   els.btnStart.classList.toggle("hidden", !session.isHost);
   els.botRow.classList.toggle("hidden", !session.isHost);
-  [els.btnBots0, els.btnBots1, els.btnBots2].forEach((btn, n) => {
-    btn.classList.toggle("primary", botCount === n);
-  });
+  if (els.botCount) els.botCount.textContent = String(bots);
+}
+
+function botCount(lobby) {
+  return (lobby?.players || []).filter((p) => p.isBot).length;
 }
 
 function remember(res) {
@@ -247,27 +240,6 @@ function keepStraightFaces(state) {
   if (!origin) return;
   const range = state.ui?.range || 3;
   state.legalHexes = (state.legalHexes || []).filter((h) => onFaceLine(origin, h, range));
-}
-
-function hexInDirection(dirIndex) {
-  if (!lastState) return null;
-  const d = DIRS[dirIndex];
-  const legal = lastState.legalHexes || [];
-  const ui = lastState.ui || {};
-  let origin = lastState.players.find((p) => p.id === lastState.turnPlayerId);
-  if (ui.kind === "bop" && ui.otherId) {
-    origin = lastState.players.find((p) => p.id === ui.otherId) || origin;
-  }
-  if (!origin) return null;
-  let found = null;
-  const max = ui.range || 3;
-  for (let i = 1; i <= max; i++) {
-    const q = origin.q + d.q * i;
-    const r = origin.r + d.r * i;
-    if (legal.some((h) => h.q === q && h.r === r)) found = { q, r };
-    else if (ui.kind === "bop") break;
-  }
-  return found;
 }
 
 showScreen("lobby");

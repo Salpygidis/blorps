@@ -1,6 +1,38 @@
 let ctx;
 let muted = false;
 
+const BGM_URL = "/blorps-bgm.mp3";
+const BGM_VOLUME = 0.35;
+const bgm = new Audio(BGM_URL);
+bgm.loop = true;
+bgm.preload = "auto";
+bgm.volume = BGM_VOLUME;
+
+let wantBgm = false;
+let primed = false;
+let priming = false;
+
+function syncBgm() {
+  if (wantBgm && !muted) {
+    if (bgm.paused) bgm.play().catch(() => {});
+    return;
+  }
+  if (!bgm.paused) bgm.pause();
+  if (!wantBgm) {
+    try {
+      bgm.currentTime = 0;
+    } catch {
+      /* not seekable yet */
+    }
+  }
+}
+
+/** Loop the race track during a match. Login and waiting rooms stay quiet. */
+export function setMatchMusic(on) {
+  wantBgm = !!on;
+  syncBgm();
+}
+
 function ac() {
   if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
   if (ctx.state === "suspended") ctx.resume();
@@ -9,6 +41,7 @@ function ac() {
 
 export function setMuted(v) {
   muted = v;
+  syncBgm();
 }
 
 export function isMuted() {
@@ -76,5 +109,34 @@ export function unlockAudio() {
     ac();
   } catch {
     /* ignore */
+  }
+  if (primed) {
+    syncBgm();
+    return;
+  }
+  if (priming) return;
+  priming = true;
+  const resume = bgm.volume;
+  bgm.volume = 0;
+  const pending = bgm.play();
+  const finish = () => {
+    bgm.pause();
+    try {
+      bgm.currentTime = 0;
+    } catch {
+      /* not seekable yet */
+    }
+    bgm.volume = resume;
+    priming = false;
+    primed = true;
+    syncBgm();
+  };
+  if (pending && typeof pending.then === "function") {
+    pending.then(finish).catch(() => {
+      bgm.volume = resume;
+      priming = false;
+    });
+  } else {
+    finish();
   }
 }

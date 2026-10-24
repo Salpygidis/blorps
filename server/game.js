@@ -19,18 +19,19 @@ import { buildBoard } from "./map.js";
  * Authoritative Blorps rules.
  *
  * Movement: tap an adjacent legal hex, up to remainingMove times.
- * Zoomies: the first move may be a straight hop of 2 hexes. Size 6+ still starts with 1 move.
- * Long Reach: +1 movement while smaller than size 6.
- * Stepping onto a higher hex costs 2. A big slime (size 6+) climbs for 1.
- * Slip-n-Slide: leaving water costs 1, even uphill.
- * First hex of the main move: drop 1 slime token (size stays at least 1).
- * If that hex already has another Blorp, hand them the slime instead of leaving a token.
+ * Zoomies: the first move may be a straight hop of 2 hexes. 6+ points still starts with 1 move.
+ * Long Reach: +1 movement while you have fewer than 6 points.
+ * Stepping onto a higher hex costs 2. At 6 points or more, climbing costs 1.
+ * Slip-n-Slide: under 6 points, leaving water costs 1, even uphill.
+ * First move of the turn: leave 1 slime token on the hex you started from (you always keep at least 1 slime).
+ * You cannot jump back onto that starting hex during this turn. A longer bounce may fly over it. A later turn can.
+ * Landing on another Blorp still offers Bounce or Bop. It does not hand them the slime.
  * Land on a slime token (anyone's): pick it up for +1 and one free bounce.
  * Free bounce: leave through one of the six sides and keep going, up to 2 hexes.
- * Fruit stays in your tray: apple/banana 1, grapes 2. It does not change your size.
+ * Fruit stays in your tray: apple/banana 1, grapes 2.
  * Every power-up you hold is worth 1. Apple Fan, Banana Bunch, and Grape Stomp
  * also add +1 for each of that fruit currently in your tray.
- * Points are the tray total. First to 10 wins. Size is still your slime count.
+ * Points are the tray total. First to 10 wins. Slowing down and climbing use that total.
  * A new crystal draws the top power-up card. Each player draws once per crystal.
  * Land on a player: Bounce (same free bounce) or Bop (push up to 2 straight).
  * A bop steals 1 slime, or a random fruit from their tray if you choose that.
@@ -57,6 +58,7 @@ export class Game {
     this.phaseData = {};
     this.remainingMove = 0;
     this.movedThisTurn = false;
+    this.freshDrop = null;
     this.winnerId = null;
     this.log = [];
     this.turnNumber = 0;
@@ -76,6 +78,7 @@ export class Game {
     game.hexes = board.hexes;
     game.fruits = board.fruits;
     game.captures = board.captures;
+    game.foundations = board.foundations;
 
     game.players = lobbyPlayers.map((p, i) => {
       const actorIndex = actors.findIndex((a) => a.id === p.id);
@@ -201,9 +204,14 @@ export class Game {
     );
   }
 
+  pointTotal(player) {
+    return tally(player).points;
+  }
+
   moveRange(p) {
-    let m = p.slime >= SIZE_SLOW_AT ? BASE_MOVE_BIG : BASE_MOVE_SMALL;
-    if (hasUpgrade(p, "longreach") && p.slime < SIZE_SLOW_AT) m += 1;
+    const points = this.pointTotal(p);
+    let m = points >= SIZE_SLOW_AT ? BASE_MOVE_BIG : BASE_MOVE_SMALL;
+    if (hasUpgrade(p, "longreach") && points < SIZE_SLOW_AT) m += 1;
     return m;
   }
 
@@ -235,6 +243,7 @@ export class Game {
     this.phase = "move";
     this.phaseData = {};
     this.movedThisTurn = false;
+    this.freshDrop = null;
     this.remainingMove = this.moveRange(p);
     this.note(`${p.name}'s turn · ${this.remainingMove} move${this.remainingMove === 1 ? "" : "s"}.`);
     if (this.legalHexes().length === 0) {
@@ -269,10 +278,10 @@ export class Game {
     this.checkScore(player);
   }
 
-  /** Win by the tray total, so fruit and cards count without changing size. */
+  /** Win by the tray total. */
   checkScore(player) {
     if (!player || player.isSpectator || this.status !== "playing") return;
-    const points = tally(player).points;
+    const points = this.pointTotal(player);
     if (points < WIN_SLIME) return;
     this.status = "finished";
     this.phase = "over";
@@ -423,19 +432,12 @@ export class Game {
     if (this.status !== "playing") return;
 
     if (firstMain) {
-      const landedOn = this.occupant(q, r, player.id);
-      if (landedOn) {
+      const before = this.slimes.length;
+      this.placeSlime(player, from.q, from.r);
+      this.freshDrop = { q: Number(from.q), r: Number(from.r) };
+      if (this.slimes.length > before) {
         this.addSlime(player, -1, "drop");
-        this.addSlime(landedOn, 1, "handoff");
-        this.events.push({ type: "handoff", playerId: player.id, otherId: landedOn.id });
-        this.note(`${player.name} hands a slime to ${landedOn.name}.`);
-      } else {
-        const before = this.slimes.length;
-        this.placeSlime(player, q, r);
-        if (this.slimes.length > before) {
-          this.addSlime(player, -1, "drop");
-          this.note(`${player.name} leaves a goo drop.`);
-        }
+        this.note(`${player.name} leaves a goo drop behind.`);
       }
       if (this.status !== "playing") return;
     }
@@ -605,7 +607,7 @@ export class Game {
   }
 
   noteSlide(player, from, to) {
-    if (!hasUpgrade(player, "slider") || player.slime >= SIZE_SLOW_AT) return;
+    if (!hasUpgrade(player, "slider") || this.pointTotal(player) >= SIZE_SLOW_AT) return;
     const start = this.hexAt(from.q, from.r);
     const dest = this.hexAt(to.q, to.r);
     const climbing = (dest?.elevation ?? 0) > (start?.elevation ?? 0);
@@ -798,6 +800,11 @@ export class Game {
     return true;
   }
 
+  isFreshDrop(h) {
+    if (!this.freshDrop || !h) return false;
+    return Number(h.q) === Number(this.freshDrop.q) && Number(h.r) === Number(this.freshDrop.r);
+  }
+
   legalHexes() {
     if (this.status !== "playing") return [];
     const p = this.current();
@@ -808,12 +815,12 @@ export class Game {
     return [];
   }
 
-  /** Flat and downhill cost 1. Climbing costs 2, or 1 for a big slime. Slip-n-Slide leaves water for 1. */
+  /** Flat and downhill cost 1. Climbing costs 2 under 6 points, or 1 at 6 points or more. Slip-n-Slide leaves water for 1. */
   moveCost(player, from, to) {
     const start = this.hexAt(from.q, from.r);
     const dest = this.hexAt(to.q, to.r);
     const climbing = (dest?.elevation ?? 0) > (start?.elevation ?? 0);
-    if (climbing && player.slime < SIZE_SLOW_AT) {
+    if (climbing && this.pointTotal(player) < SIZE_SLOW_AT) {
       if (hasUpgrade(player, "slider") && start?.terrain === "water") return 1;
       return 2;
     }
@@ -825,6 +832,7 @@ export class Game {
     const out = [];
     const seen = new Set();
     const add = (h) => {
+      if (this.isFreshDrop(h)) return;
       const k = key(h.q, h.r);
       if (seen.has(k)) return;
       seen.add(k);
@@ -863,6 +871,8 @@ export class Game {
           if (!hopper) break;
           continue;
         }
+        // The hex you just left is not a landing. A longer hop may still fly over it.
+        if (this.isFreshDrop(h)) continue;
         out.push({ q: h.q, r: h.r });
       }
     }
@@ -972,6 +982,7 @@ export class Game {
         claimedCaptures: p.claimedCaptures,
       })),
       hexes: Object.values(this.hexes),
+      foundations: this.foundations || [{ q: 0, r: 0 }],
       fruits: this.fruits,
       slimes: this.slimes,
       captures: this.captures,

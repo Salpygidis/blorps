@@ -1,4 +1,4 @@
-import { key, ring, distance } from "../shared/hex.js";
+import { key, ring, distance, neighbors } from "../shared/hex.js";
 import { pickN, shuffle } from "../shared/rng.js";
 import { FRUIT } from "../shared/constants.js";
 
@@ -24,6 +24,36 @@ export function startSpots(playerCount) {
   return STARTS[playerCount] || STARTS[2];
 }
 
+/** 2–4 players use one plate. 5–8 use two. 9–12 use four. */
+export function foundationCount(playerCount) {
+  const n = playerCount || 0;
+  if (n >= 9) return 4;
+  if (n >= 5) return 2;
+  return 1;
+}
+
+/**
+ * Plate centers. A step of 6 in r puts the next foundation against the short
+ * side of this one: the rims touch, and two hexes connect the islands.
+ */
+export function plateOrigins(count) {
+  if (count >= 4) {
+    return [
+      { q: 0, r: -9 },
+      { q: 0, r: -3 },
+      { q: 0, r: 3 },
+      { q: 0, r: 9 },
+    ];
+  }
+  if (count === 2) {
+    return [
+      { q: 0, r: -3 },
+      { q: 0, r: 3 },
+    ];
+  }
+  return [{ q: 0, r: 0 }];
+}
+
 /**
  * The foundation plate only covers about a third of these cells, so a slime
  * would stand on a hex the mesh cuts in half. They are not spaces.
@@ -36,22 +66,32 @@ const CLIPPED_EDGES = [
   { q: -4, r: 2 },
 ];
 
-export function buildBoard(playerCount, rand) {
+function islandCells() {
   const clipped = new Set(CLIPPED_EDGES.map((h) => key(h.q, h.r)));
-  const cells = ring(3).filter((h) => !clipped.has(key(h.q, h.r)));
+  return ring(3).filter((h) => !clipped.has(key(h.q, h.r)));
+}
 
+export function buildBoard(playerCount, rand) {
+  const origins = plateOrigins(foundationCount(playerCount));
+  const local = islandCells();
   const map = {};
-  for (const h of cells) {
-    map[key(h.q, h.r)] = {
-      q: h.q,
-      r: h.r,
-      terrain: "open",
-      elevation: 0,
-    };
-  }
+  origins.forEach((origin, plate) => {
+    for (const h of local) {
+      const q = h.q + origin.q;
+      const r = h.r + origin.r;
+      const k = key(q, r);
+      if (map[k]) continue;
+      map[k] = { q, r, terrain: "open", elevation: 0, plate };
+    }
+  });
 
-  const starts = startSpots(playerCount);
+  const seam = seamKeys(map);
+  const starts =
+    origins.length === 1
+      ? startSpots(playerCount).map((s) => ({ q: s.q, r: s.r }))
+      : spreadStarts(map, playerCount, rand);
   const startKeys = new Set(starts.map((s) => key(s.q, s.r)));
+  const plates = origins.length;
 
   const allKeys = Object.keys(map);
   const pickFree = (n, pred) => {
@@ -60,14 +100,14 @@ export function buildBoard(playerCount, rand) {
   };
 
   for (const k of pickFree(
-    5,
-    (c, k) => c.terrain === "open" && !startKeys.has(k)
+    5 * plates,
+    (c, k) => c.terrain === "open" && !startKeys.has(k) && !seam.has(k)
   )) {
     map[k].terrain = "tree";
   }
 
   for (const k of pickFree(
-    5,
+    5 * plates,
     (c, k) => c.terrain === "open" && !startKeys.has(k)
   )) {
     map[k].terrain = "water";
@@ -75,7 +115,7 @@ export function buildBoard(playerCount, rand) {
   }
 
   for (const k of pickFree(
-    3,
+    3 * plates,
     (c, k) => c.terrain === "open" && !startKeys.has(k)
   )) {
     map[k].elevation = 1;
@@ -103,16 +143,19 @@ export function buildBoard(playerCount, rand) {
 
   // Fruit and crystals only sit on open ground. A tree hex never holds one.
   const blocked = new Set();
-  const fruitTypes = [
-    "apple",
-    "apple",
-    "apple",
-    "banana",
-    "banana",
-    "banana",
-    "grapes",
-    "grapes",
-  ];
+  const fruitTypes = [];
+  for (let i = 0; i < plates; i++) {
+    fruitTypes.push(
+      "apple",
+      "apple",
+      "apple",
+      "banana",
+      "banana",
+      "banana",
+      "grapes",
+      "grapes"
+    );
+  }
   const fruitKeys = takeClearings(map, startKeys, blocked, fruitTypes.length, rand);
   const fruits = fruitKeys.map((k, i) => {
     const type = fruitTypes[i];
@@ -131,7 +174,7 @@ export function buildBoard(playerCount, rand) {
     blocked,
     playerCount,
     rand,
-    (c) => distance(c, { q: 0, r: 0 }) >= 1
+    (c) => !origins.some((origin) => origin.q === c.q && origin.r === c.r)
   );
   const captures = capKeys.map((k, i) => ({
     id: `c${i}`,
@@ -141,12 +184,51 @@ export function buildBoard(playerCount, rand) {
   }));
   shiftOntoClearings([...fruits, ...captures], map, startKeys, blocked, rand);
 
+  for (const cell of Object.values(map)) delete cell.plate;
+
   return {
     hexes: map,
     fruits,
     captures,
     starts,
+    foundations: origins,
   };
+}
+
+function seamKeys(map) {
+  const seam = new Set();
+  for (const cell of Object.values(map)) {
+    for (const n of neighbors(cell)) {
+      const other = map[key(n.q, n.r)];
+      if (!other || other.plate === cell.plate) continue;
+      seam.add(key(cell.q, cell.r));
+      seam.add(key(other.q, other.r));
+    }
+  }
+  return seam;
+}
+
+function spreadStarts(map, count, rand) {
+  const cells = Object.values(map);
+  const edge = cells.filter(
+    (c) => neighbors(c).filter((n) => map[key(n.q, n.r)]).length <= 4
+  );
+  let pool = shuffle(edge.length >= count ? edge : cells, rand);
+  const chosen = [];
+  while (chosen.length < count && pool.length) {
+    let best = pool[0];
+    let bestD = -1;
+    for (const c of pool) {
+      const d = chosen.reduce((min, s) => Math.min(min, distance(c, s)), 99);
+      if (d > bestD) {
+        bestD = d;
+        best = c;
+      }
+    }
+    chosen.push({ q: best.q, r: best.r });
+    pool = pool.filter((c) => c.q !== best.q || c.r !== best.r);
+  }
+  return chosen;
 }
 
 function takeClearings(map, startKeys, blocked, n, rand, extra) {

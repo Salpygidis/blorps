@@ -5,8 +5,23 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as THREE from "three";
 import { HEX_SIZE, hexToWorld, ring } from "../shared/hex.js";
-import { capScaleFor, foundationPose, PIECE_SPAN } from "../shared/boardFit.js";
-import { layoutBoard, tileDepth, useBoardModels } from "../src/meshes.js";
+import {
+  capScaleFor,
+  foundationPose,
+  PIECE_SPAN,
+  FOUNDATION_PITCH,
+  FOUNDATION_FLOOR_Y,
+  FOUNDATION_RIM_Y,
+} from "../shared/boardFit.js";
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+import {
+  topCapGeometry,
+  LIQUID_TOP,
+  HEIGHT_TOP,
+  FOUNDATION_TOP,
+  TOP_NY,
+} from "../src/boardModels.js";
+import { layoutBoard, makeTile, tileDepth, useBoardModels } from "../src/meshes.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const models = join(root, "public", "models");
@@ -180,5 +195,224 @@ describe("board models", () => {
     assert.ok(water > open);
     assert.ok(hill > water);
     assert.ok(hill < 2);
+    const pool = tileDepth({ terrain: "open", elevation: 0, pool: true });
+    assert.equal(pool, water);
+  });
+
+  it("prints the crystal photo on the liquid top and keeps the hex open", () => {
+    const liquidGeo = new THREE.BufferGeometry();
+    liquidGeo.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute([-1, 0, -1, 1, 0, -1, 0, 0.4, 0], 3)
+    );
+    const heightGeo = liquidGeo.clone();
+    const liquidTop = flatTop(0.4);
+    const heightTop = flatTop(0.8);
+    const crystalMat = new THREE.MeshBasicMaterial({ color: "#ffffff" });
+    const waterMat = new THREE.MeshBasicMaterial({ color: "#3ec8ea" });
+    const rockMat = new THREE.MeshBasicMaterial({ color: "#a97449" });
+    useBoardModels({
+      foundation: new THREE.BufferGeometry(),
+      liquid: liquidGeo,
+      liquidMat: new THREE.MeshStandardMaterial(),
+      liquidTop,
+      crystalTopMat: crystalMat,
+      waterTopMat: waterMat,
+      height: heightGeo,
+      heightMat: new THREE.MeshStandardMaterial(),
+      heightTop,
+      rockTopMat: rockMat,
+      foundationSize: { width: 2, depth: 2, height: 0.2 },
+      liquidHeight: 0.4,
+      heightHeight: 0.8,
+      pieceMaxX: 0.6,
+    });
+    layoutBoard([{ q: 0, r: 0, terrain: "open" }]);
+
+    const poolHex = { q: 1, r: 0, terrain: "open", elevation: 0, pool: true };
+    const pool = makeTile(poolHex);
+    assert.equal(pool.userData.terrain, "open");
+    assert.ok(pool.userData.crystalMat);
+    assert.notEqual(pool.userData.crystalMat, crystalMat);
+    const poolCap = photoOn(pool, liquidGeo);
+    assert.equal(poolCap.geometry, liquidTop);
+    assert.equal(poolCap.material, pool.userData.crystalMat);
+    assert.equal(poolCap.parent.material !== pool.userData.crystalMat, true);
+    missesRay(poolCap);
+
+    const water = makeTile({ q: 0, r: 0, terrain: "water", elevation: -1 });
+    assert.equal(water.userData.crystalMat, undefined);
+    const waterCap = photoOn(water, liquidGeo);
+    assert.equal(waterCap.material, waterMat);
+    assert.equal(waterCap.geometry, liquidTop);
+    missesRay(waterCap);
+
+    const hill = makeTile({ q: 0, r: 1, terrain: "open", elevation: 1 });
+    const rockCap = photoOn(hill, heightGeo);
+    assert.equal(rockCap.material, rockMat);
+    assert.equal(rockCap.geometry, heightTop);
+    missesRay(rockCap);
+
+    const open = makeTile({ q: 1, r: -1, terrain: "open", elevation: 0 });
+    assert.equal(open.userData.crystalMat, undefined);
+    open.traverse((obj) => {
+      if (!obj.isMesh) return;
+      assert.notEqual(obj.material, waterMat);
+      assert.notEqual(obj.material, rockMat);
+      assert.notEqual(obj.material, crystalMat);
+      assert.notEqual(obj.geometry, liquidTop);
+      assert.notEqual(obj.geometry, heightTop);
+    });
+  });
+
+  it("keeps each photo on the upper horizontal faces", () => {
+    const cases = [
+      ["liquid.obj", LIQUID_TOP, 0.12],
+      ["height.obj", HEIGHT_TOP, 0.3],
+      ["foundation.obj", FOUNDATION_TOP, 2.5],
+    ];
+    for (const [name, fraction, lowest] of cases) {
+      const src = meshGeometry(name);
+      let maxY = -Infinity;
+      const pos = src.attributes.position;
+      for (let i = 0; i < pos.count; i++) maxY = Math.max(maxY, pos.getY(i));
+      const srcTris = (src.index ? src.index.count : pos.count) / 3;
+      const cap = topCapGeometry(src, fraction);
+      const tris = faceRecords(cap);
+      assert.ok(tris.length > 0 && tris.length < srcTris, name);
+      let nearRim = false;
+      let nearFloor = false;
+      for (const tri of tris) {
+        assert.ok(tri.y + 1e-4 >= maxY * fraction, `${name} centroid ${tri.y}`);
+        assert.ok(tri.ny + 1e-4 >= TOP_NY, `${name} ny ${tri.ny}`);
+        assert.ok(tri.minY > lowest, `${name} vertex ${tri.minY}`);
+        if (name === "foundation.obj" && Math.abs(tri.y - FOUNDATION_RIM_Y) < 0.15) nearRim = true;
+        if (name === "foundation.obj" && Math.abs(tri.y - FOUNDATION_FLOOR_Y) < 0.2) nearFloor = true;
+      }
+      if (name === "foundation.obj") {
+        assert.ok(nearRim, "grass misses the foundation rim");
+        assert.ok(nearFloor, "grass misses the groove floors");
+      }
+    }
+  });
+
+  it("maps a photo upright, image top toward local -z", () => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(
+        [
+          0, 1, 0,
+          2, 1, 0,
+          2, 1, -4,
+          0, 0, 0,
+        ],
+        3
+      )
+    );
+    geo.setIndex([0, 1, 2]);
+    const cap = topCapGeometry(geo, 0.5);
+    assert.equal(cap.attributes.position.count, 3);
+    const pos = cap.attributes.position;
+    const uv = cap.attributes.uv;
+    let far = false;
+    for (let i = 0; i < pos.count; i++) {
+      if (Math.abs(pos.getX(i) - 2) < 1e-6 && Math.abs(pos.getZ(i) + 4) < 1e-6) {
+        assert.ok(Math.abs(uv.getX(i) - 1) < 1e-5);
+        assert.ok(Math.abs(uv.getY(i) - 1) < 1e-5);
+        far = true;
+      }
+      if (Math.abs(pos.getX(i)) < 1e-6 && Math.abs(pos.getZ(i)) < 1e-6) {
+        assert.ok(Math.abs(uv.getX(i)) < 1e-5);
+        assert.ok(Math.abs(uv.getY(i)) < 1e-5);
+      }
+    }
+    assert.ok(far);
+  });
+
+  it("repeats grass once per foundation hex", () => {
+    const pitch = FOUNDATION_PITCH;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute([0, 4, 0, pitch, 4, 0, 0, 4, -pitch], 3)
+    );
+    const cap = topCapGeometry(geo, 0.5, { repeat: pitch });
+    const pos = cap.attributes.position;
+    const uv = cap.attributes.uv;
+    assert.equal(pos.count, 3);
+    for (let i = 0; i < pos.count; i++) {
+      assert.ok(Math.abs(uv.getX(i) - pos.getX(i) / pitch) < 1e-5);
+      assert.ok(Math.abs(uv.getY(i) - -pos.getZ(i) / pitch) < 1e-5);
+    }
   });
 });
+
+function flatTop(y) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute([-0.5, y, -0.5, 0.5, y, -0.5, 0, y, 0.5], 3)
+  );
+  return geo;
+}
+
+function photoOn(root, bodyGeo) {
+  let body = null;
+  root.traverse((obj) => {
+    if (obj.isMesh && obj.geometry === bodyGeo) body = obj;
+  });
+  assert.ok(body);
+  assert.equal(body.children.length, 1);
+  const cap = body.children[0];
+  assert.equal(cap.isMesh, true);
+  return cap;
+}
+
+function missesRay(cap) {
+  const hits = [];
+  cap.raycast(null, hits);
+  assert.equal(hits.length, 0);
+}
+
+function meshGeometry(name) {
+  const text = readFileSync(join(models, name), "utf8");
+  const root = new OBJLoader().parse(text);
+  let geo = null;
+  root.traverse((obj) => {
+    if (!geo && obj.isMesh) geo = obj.geometry;
+  });
+  assert.ok(geo, name);
+  return geo;
+}
+
+function faceRecords(geometry) {
+  const pos = geometry.attributes.position;
+  const index = geometry.index;
+  const count = index ? index.count : pos.count;
+  const out = [];
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  const fn = new THREE.Vector3();
+  for (let i = 0; i < count; i += 3) {
+    const ia = index ? index.getX(i) : i;
+    const ib = index ? index.getX(i + 1) : i + 1;
+    const ic = index ? index.getX(i + 2) : i + 2;
+    a.fromBufferAttribute(pos, ia);
+    b.fromBufferAttribute(pos, ib);
+    c.fromBufferAttribute(pos, ic);
+    ab.subVectors(b, a);
+    ac.subVectors(c, a);
+    fn.crossVectors(ab, ac);
+    const len = fn.length() || 1;
+    out.push({
+      y: (a.y + b.y + c.y) / 3,
+      ny: Math.abs(fn.y) / len,
+      minY: Math.min(a.y, b.y, c.y),
+    });
+  }
+  return out;
+}

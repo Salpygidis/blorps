@@ -50,16 +50,16 @@ export function hexShape(size = HEX_SIZE * 0.92) {
 
 export function tileDepth(hex) {
   if (kit?.groundTop) {
-    if (hex.terrain === "water") return kit.waterTop;
+    if (hex.terrain === "water" || hex.pool) return kit.waterTop;
     if ((hex.elevation || 0) > 0) return kit.hillTop;
     return kit.groundTop;
   }
-  if (hex.terrain === "water" || hex.elevation < 0) return 0.16;
+  if (hex.terrain === "water" || hex.pool || hex.elevation < 0) return 0.16;
   return 0.26 + Math.max(0, hex.elevation) * 0.42;
 }
 
 export function tileColor(hex) {
-  if (hex.terrain === "water") return "#3db8d9";
+  if (hex.terrain === "water" || hex.pool) return "#3db8d9";
   if (hex.terrain === "tree") return "#5aa34e";
   if (hex.elevation > 0) return "#a97449";
   return "#6fbf63";
@@ -83,19 +83,25 @@ function makeModelTile(hex) {
   const picker = new THREE.Mesh(kit.pickerGeo, kit.pickerMat);
   picker.position.y = depth;
   group.add(picker);
-  if (hex.terrain === "water") {
+  if (hex.terrain === "water" || hex.pool) {
     const water = new THREE.Mesh(kit.liquid, kit.liquidMat);
     water.scale.setScalar(kit.capScale);
     water.position.y = kit.grooveY;
     water.receiveShadow = true;
+    water.renderOrder = 1;
     group.add(water);
+    const topMat = hex.pool ? kit.crystalTopMat : kit.waterTopMat;
+    const capMat = attachTop(water, kit.liquidTop, topMat, hex.pool);
+    if (capMat) group.userData.crystalMat = capMat;
   } else if ((hex.elevation || 0) > 0) {
     const rise = new THREE.Mesh(kit.height, kit.heightMat);
     rise.scale.setScalar(kit.capScale);
     rise.position.y = kit.grooveY;
     rise.castShadow = true;
     rise.receiveShadow = true;
+    rise.renderOrder = 1;
     group.add(rise);
+    attachTop(rise, kit.heightTop, kit.rockTopMat, false);
   }
   if (hex.terrain === "tree") {
     const tree = makeTree();
@@ -104,6 +110,18 @@ function makeModelTile(hex) {
     group.add(tree);
   }
   return group;
+}
+
+function attachTop(body, geometry, material, ownMaterial) {
+  if (!geometry || !material) return null;
+  const mat = ownMaterial ? material.clone() : material;
+  const cap = new THREE.Mesh(geometry, mat);
+  cap.renderOrder = 2;
+  cap.castShadow = false;
+  cap.receiveShadow = false;
+  cap.raycast = () => {};
+  body.add(cap);
+  return ownMaterial ? mat : null;
 }
 
 function makePrismTile(hex) {
@@ -119,8 +137,8 @@ function makePrismTile(hex) {
   geo.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({
     color: tileColor(hex),
-    roughness: hex.terrain === "water" ? 0.2 : 0.7,
-    metalness: hex.terrain === "water" ? 0.15 : 0.02,
+    roughness: hex.terrain === "water" || hex.pool ? 0.2 : 0.7,
+    metalness: hex.terrain === "water" || hex.pool ? 0.15 : 0.02,
     flatShading: true,
   });
   const mesh = new THREE.Mesh(geo, mat);
@@ -132,7 +150,7 @@ function makePrismTile(hex) {
     tree.position.y = depth;
     mesh.add(tree);
   }
-  if (hex.terrain === "water") {
+  if (hex.terrain === "water" || hex.pool) {
     const water = new THREE.Mesh(
       new THREE.CircleGeometry(HEX_SIZE * 0.72, 6),
       new THREE.MeshStandardMaterial({
@@ -358,35 +376,6 @@ export function makeToken(color = "#e6b325") {
   face.rotation.x = -Math.PI / 2;
   face.position.y = height + 0.004;
   g.add(disc, face);
-  return g;
-}
-
-export function makeCapture() {
-  const g = new THREE.Group();
-  const crystal = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.28, 0),
-    new THREE.MeshStandardMaterial({
-      color: "#c9f4ff",
-      emissive: "#7ad7ff",
-      emissiveIntensity: 0.5,
-      roughness: 0.2,
-      metalness: 0.3,
-      transparent: true,
-      opacity: 0.92,
-    })
-  );
-  crystal.position.y = 0.42;
-  const glow = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.18, 0.22, 0.08, 6),
-    new THREE.MeshStandardMaterial({
-      color: "#fffbe6",
-      emissive: "#ffe27a",
-      emissiveIntensity: 0.4,
-    })
-  );
-  glow.position.y = 0.04;
-  g.add(crystal, glow);
-  g.userData.crystal = crystal;
   return g;
 }
 

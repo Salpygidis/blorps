@@ -30,7 +30,7 @@ export function fruitPickupPoints(player, type) {
 
 /**
  * Everything in front of a player, with the points each row is worth.
- * Slime is 1 each and is also body size. Fruit keeps its own value.
+ * Slime is 1 each. Fruit keeps its own value. The total is the only score.
  * Every power-up is 1. Fruit cards add +1 per matching fruit in the tray.
  */
 export function tally(player) {

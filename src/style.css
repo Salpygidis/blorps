@@ -97,6 +97,9 @@ body {
 #app label {
   pointer-events: auto;
 }
+#app .feed-dock {
+  pointer-events: none;
+}
 
 .hidden {
   display: none !important;
@@ -366,6 +369,8 @@ input {
   flex-direction: column;
   gap: 8px;
   width: min(190px, 42vw);
+  max-height: calc(100vh - 180px - var(--safe-t) - var(--safe-b));
+  overflow: auto;
 }
 .player-card {
   position: relative;
@@ -557,6 +562,27 @@ input {
   font-weight: 700;
 }
 
+.feed-dock {
+  position: absolute;
+  inset: 0;
+}
+.feed-toggle {
+  display: none;
+  border: 0;
+  border-radius: 0 16px 16px 0;
+  padding: 10px 12px;
+  min-height: 44px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+.feed-toggle.fresh {
+  background: #fff3a8;
+}
 .feed {
   position: absolute;
   left: 12px;
@@ -629,47 +655,6 @@ input {
   min-width: 130px;
 }
 
-.dir-pad {
-  width: 168px;
-  height: 168px;
-  position: relative;
-}
-.dir-pad button {
-  position: absolute;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  border: 0;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-  font-size: 20px;
-  cursor: pointer;
-}
-.dir-pad button:nth-child(1) {
-  left: 58px;
-  top: 0;
-}
-.dir-pad button:nth-child(2) {
-  right: 6px;
-  top: 28px;
-}
-.dir-pad button:nth-child(3) {
-  right: 6px;
-  bottom: 28px;
-}
-.dir-pad button:nth-child(4) {
-  left: 58px;
-  bottom: 0;
-}
-.dir-pad button:nth-child(5) {
-  left: 6px;
-  bottom: 28px;
-}
-.dir-pad button:nth-child(6) {
-  left: 6px;
-  top: 28px;
-}
-
 .end-btn {
   background: #fff;
 }
@@ -729,11 +714,11 @@ input {
 #announce {
   position: fixed;
   left: 50%;
-  top: 28%;
+  top: 24%;
   z-index: 18;
   pointer-events: none;
   opacity: 0;
-  transform: translate(-50%, 16px) scale(0.92);
+  transform: translate(-50%, 8px) scale(0.92);
   transition: opacity 0.2s ease, transform 0.35s cubic-bezier(0.2, 1.4, 0.4, 1);
 }
 #announce.show {
@@ -743,21 +728,16 @@ input {
 .announce-card {
   background: #fff3a8;
   color: var(--ink);
-  border-radius: 24px;
-  padding: 16px 28px 14px;
-  box-shadow: 0 18px 40px rgba(27, 70, 110, 0.28);
+  border-radius: 999px;
+  padding: 4px 10px 5px;
+  box-shadow: 0 6px 16px rgba(27, 70, 110, 0.18);
   text-align: center;
-  min-width: 240px;
 }
 .announce-card strong {
   display: block;
-  font-size: 28px;
-  letter-spacing: 0.03em;
-}
-.announce-card span {
-  display: block;
-  margin-top: 4px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 #toast {
@@ -814,6 +794,7 @@ input {
     left: 12px;
     right: 12px;
     top: calc(62px + var(--safe-t));
+    max-height: 28vh;
   }
   .player-card {
     flex: 1;
@@ -832,12 +813,49 @@ input {
   .powerups::after {
     display: none;
   }
+  .feed-dock {
+    inset: auto;
+    left: 0;
+    top: calc(200px + var(--safe-t));
+    bottom: calc(120px + var(--safe-b));
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    max-width: calc(100vw - 12px);
+    z-index: 7;
+  }
+  .feed-toggle {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+  }
+  .feed-toggle[hidden] {
+    display: none;
+  }
+  #app .feed-dock:not(.open) .feed {
+    pointer-events: none;
+  }
   .feed {
+    position: static;
     top: auto;
-    bottom: calc(248px + var(--safe-b));
-    left: 12px;
+    left: auto;
+    flex: 0 0 0px;
+    width: 0;
+    min-width: 0;
+    max-height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: flex-basis 0.2s ease, width 0.2s ease, opacity 0.2s ease;
+  }
+  .feed-dock.open .feed {
+    flex-basis: min(280px, 74vw);
     width: min(280px, 74vw);
-    max-height: 28vh;
+    margin-left: 8px;
+    padding-right: 4px;
+    overflow-y: auto;
+    opacity: 1;
   }
   .feed p {
     font-size: 14px;
@@ -852,7 +870,7 @@ input {
     font-size: 14px;
   }
   .inventory {
-    bottom: calc(188px + var(--safe-b));
+    bottom: calc(120px + var(--safe-b));
     width: min(210px, 52vw);
     max-height: 30vh;
   }

@@ -13,7 +13,7 @@ import {
   faceStep,
   onFaceLine,
 } from "../shared/hex.js";
-import { buildBoard, hexCount } from "../server/map.js";
+import { buildBoard, foundationCount, hexCount, plateOrigins } from "../server/map.js";
 import { mulberry32 } from "../shared/rng.js";
 
 describe("hex math", () => {
@@ -88,7 +88,7 @@ describe("hex math", () => {
   });
 
   it("never places fruit or crystals on a tree", () => {
-    for (const players of [2, 3, 4]) {
+    for (const players of [2, 3, 4, 5, 8, 9, 12]) {
       for (let seed = 1; seed <= 80; seed++) {
         const board = buildBoard(players, mulberry32(seed));
         const trees = new Set(
@@ -114,15 +114,59 @@ describe("hex math", () => {
   });
 
   it("keeps a walkable neighbor at every start", () => {
-    for (let seed = 1; seed <= 30; seed++) {
-      const board = buildBoard(4, mulberry32(seed));
-      for (const s of board.starts) {
-        const open = neighbors(s).some((n) => {
-          const cell = board.hexes[key(n.q, n.r)];
-          return cell && cell.terrain !== "tree";
-        });
-        assert.equal(open, true);
+    for (const players of [4, 8, 12]) {
+      for (let seed = 1; seed <= 20; seed++) {
+        const board = buildBoard(players, mulberry32(seed));
+        assert.equal(board.starts.length, players);
+        for (const s of board.starts) {
+          const open = neighbors(s).some((n) => {
+            const cell = board.hexes[key(n.q, n.r)];
+            return cell && cell.terrain !== "tree";
+          });
+          assert.equal(open, true, `${players} players seed ${seed}`);
+        }
       }
     }
   });
+
+  it("joins extra foundations when the table grows", () => {
+    assert.equal(foundationCount(4), 1);
+    assert.equal(foundationCount(5), 2);
+    assert.equal(foundationCount(8), 2);
+    assert.equal(foundationCount(9), 4);
+    assert.equal(foundationCount(12), 4);
+
+    const two = buildBoard(6, mulberry32(7));
+    assert.equal(two.foundations.length, 2);
+    assert.deepEqual(two.foundations, plateOrigins(2));
+    assert.equal(hexCount(two.hexes), 35 * 2);
+    assert.equal(linkedPlates(two), true);
+
+    const four = buildBoard(12, mulberry32(9));
+    assert.equal(four.foundations.length, 4);
+    assert.deepEqual(four.foundations, plateOrigins(4));
+    assert.equal(hexCount(four.hexes), 35 * 4);
+    assert.equal(linkedPlates(four), true);
+    const ids = new Set(four.starts.map((s) => key(s.q, s.r)));
+    assert.equal(ids.size, 12);
+  });
 });
+
+function linkedPlates(board) {
+  const map = board.hexes;
+  const open = Object.values(map).filter((h) => h.terrain !== "tree");
+  if (!open.length) return false;
+  const seen = new Set([key(open[0].q, open[0].r)]);
+  const queue = [open[0]];
+  while (queue.length) {
+    const h = queue.shift();
+    for (const n of neighbors(h)) {
+      const k = key(n.q, n.r);
+      const cell = map[k];
+      if (!cell || cell.terrain === "tree" || seen.has(k)) continue;
+      seen.add(k);
+      queue.push(cell);
+    }
+  }
+  return seen.size === open.length;
+}
