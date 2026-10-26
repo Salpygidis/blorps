@@ -139,7 +139,21 @@ describe("core rules", () => {
     assert.equal(g.legalHexes().some((h) => h.q === 0 && h.r === 0), true);
   });
 
-  it("eats fruit for +1 / +2 and does not respawn it", () => {
+  it("can bounce back to the starting hex after a later slime", () => {
+    const g = twoPlayers({
+      slimes: [{ id: "s1", q: 2, r: 0, ownerId: "b", color: "#fff" }],
+    });
+    g.clickHex("a", 1, 0);
+    assert.equal(g.legalHexes().some((h) => h.q === 0 && h.r === 0), false);
+    g.clickHex("a", 2, 0);
+    assert.equal(g.phase, "bounce");
+    assert.equal(g.legalHexes().some((h) => h.q === 0 && h.r === 0), true);
+    assert.equal(g.clickHex("a", 0, 0).ok, true);
+    assert.equal(g.playerById("a").q, 0);
+    assert.equal(g.playerById("a").r, 0);
+  });
+
+  it("eats fruit for 1 point each and does not respawn it", () => {
     const g = twoPlayers({
       fruits: [
         { id: "ap", q: 1, r: 0, type: "apple", value: 1 },
@@ -154,7 +168,7 @@ describe("core rules", () => {
     assert.equal(g.toJSON().fruits.some((f) => f.id === "ap"), false);
     g.clickHex("a", 2, 0);
     assert.equal(g.playerById("a").slime, START_SLIME - 1);
-    assert.equal(tally(g.playerById("a")).points, START_SLIME - 1 + 1 + 2);
+    assert.equal(tally(g.playerById("a")).points, START_SLIME - 1 + 1 + 1);
     assert.equal(g.fruits.length, 0);
     assert.equal(g.toJSON().fruits.length, 0);
     assert.equal(g.current().id, "b");
@@ -472,7 +486,7 @@ describe("core rules", () => {
     pip.upgrades = [{ id: "gooarmor" }];
     rich.hexes["1,0"].elevation = 1;
     rich.beginTurn(0);
-    assert.equal(tally(pip).points, 7);
+    assert.equal(tally(pip).points, 6);
     assert.equal(rich.remainingMove, 1);
     assert.equal(rich.moveCost(pip, pip, { q: 1, r: 0 }), 1);
     assert.equal(rich.legalHexes().some((h) => h.q === 1 && h.r === 0), true);
@@ -565,7 +579,7 @@ describe("core rules", () => {
     assert.equal(g.winnerId, "a");
     assert.equal(g.playerById("a").slime, WIN_SLIME - 1);
     assert.equal(g.playerById("a").basket[0].type, "grapes");
-    assert.equal(tally(g.playerById("a")).points, WIN_SLIME + 1);
+    assert.equal(tally(g.playerById("a")).points, WIN_SLIME);
   });
 
   it("rejects spectator actions and off-turn clicks", () => {
@@ -724,7 +738,7 @@ describe("core rules", () => {
     pip.upgrades = [{ id: "slider" }];
     rich.hexes["2,1"].elevation = -1;
     rich.beginTurn(0);
-    assert.equal(tally(pip).points, 7);
+    assert.equal(tally(pip).points, 6);
     assert.equal(rich.remainingMove, 1);
     rich.clickHex("a", 2, 0);
     assert.equal(rich.playerById("a").r, 0);

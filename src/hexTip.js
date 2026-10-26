@@ -34,7 +34,7 @@ export function describeHex(state, q, r, localId) {
   for (const fruit of state.fruits || []) {
     if (fruit.q !== q || fruit.r !== r) continue;
     if (fruit.type === "grapes") {
-      lines.push({ emoji: "🍇", text: "Grapes. Worth 2 points in your tray." });
+      lines.push({ emoji: "🍇", text: "Grapes. Worth 1 point in your tray." });
     } else if (fruit.type === "banana") {
       lines.push({ emoji: "🍌", text: "Banana. Worth 1 point in your tray." });
     } else {

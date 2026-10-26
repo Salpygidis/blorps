@@ -258,125 +258,190 @@ function makeTopHat() {
   return hat;
 }
 
+const FRUIT_FACES = {
+  apple: "/textures/tokens/apple.png",
+  banana: "/textures/tokens/banana.png",
+  grapes: "/textures/tokens/grapes.png",
+};
+
 export function makeFruit(fruit) {
+  const token = makeBoardToken(FRUIT_FACES[fruit?.type]);
+  token.userData.fruitType = fruit?.type || "";
+  return token;
+}
+
+/** Flat-topped octagon. `radius` is the distance to a vertex. */
+function octagonShape(radius) {
+  const shape = new THREE.Shape();
+  for (let i = 0; i < 8; i++) {
+    const a = Math.PI / 8 + i * (Math.PI / 4);
+    const x = Math.cos(a) * radius;
+    const y = Math.sin(a) * radius;
+    if (i === 0) shape.moveTo(x, y);
+    else shape.lineTo(x, y);
+  }
+  shape.closePath();
+  return shape;
+}
+
+function octagonPrism(radius, depth, material) {
+  const geo = new THREE.ExtrudeGeometry(octagonShape(radius), {
+    depth,
+    bevelEnabled: false,
+    curveSegments: 1,
+  });
+  geo.rotateX(-Math.PI / 2);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+/** Dashed stitch just inside the cream, one run of dashes per side. */
+function stitchRing(radius, y) {
   const g = new THREE.Group();
-  if (fruit.type === "apple") {
-    const apple = new THREE.Mesh(
-      new THREE.SphereGeometry(0.18, 14, 12),
-      new THREE.MeshStandardMaterial({ color: "#ff3b3b", roughness: 0.4 })
-    );
-    apple.scale.y = 0.9;
-    const stem = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.02, 0.02, 0.1, 6),
-      new THREE.MeshStandardMaterial({ color: "#6b3a1f" })
-    );
-    stem.position.y = 0.18;
-    const leaf = new THREE.Mesh(
-      new THREE.SphereGeometry(0.07, 8, 6),
-      new THREE.MeshStandardMaterial({ color: "#3cb86a" })
-    );
-    leaf.scale.set(1.4, 0.3, 0.8);
-    leaf.position.set(0.07, 0.18, 0);
-    g.add(apple, stem, leaf);
-  } else if (fruit.type === "banana") {
-    const banana = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.07, 0.28, 4, 8),
-      new THREE.MeshStandardMaterial({ color: "#ffd93b" })
-    );
-    banana.rotation.z = 0.6;
-    banana.rotation.x = 0.3;
-    g.add(banana);
-  } else {
-    const mat = new THREE.MeshStandardMaterial({ color: "#9b59d0" });
-    for (const [x, y, z] of [
-      [0, 0.08, 0],
-      [0.08, 0.02, 0.04],
-      [-0.07, 0.02, 0.05],
-      [0.02, 0.02, -0.08],
-      [-0.04, 0.12, -0.04],
-      [0.05, 0.12, 0.04],
-    ]) {
-      const b = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), mat);
-      b.position.set(x, y, z);
-      g.add(b);
+  const geo = new THREE.BoxGeometry(0.04, 0.004, 0.011);
+  const mat = new THREE.MeshBasicMaterial({ color: "#6a4324" });
+  const dash = 0.04;
+  const gap = 0.02;
+  for (let i = 0; i < 8; i++) {
+    const a0 = Math.PI / 8 + i * (Math.PI / 4);
+    const a1 = a0 + Math.PI / 4;
+    const p0x = Math.cos(a0) * radius;
+    const p0y = Math.sin(a0) * radius;
+    const p1x = Math.cos(a1) * radius;
+    const p1y = Math.sin(a1) * radius;
+    const dx = p1x - p0x;
+    const dy = p1y - p0y;
+    const len = Math.hypot(dx, dy);
+    const ux = dx / len;
+    const uy = dy / len;
+    const yaw = Math.atan2(uy, ux);
+    let t = (len - Math.floor(len / (dash + gap)) * (dash + gap)) / 2;
+    if (t < 0.008) t = gap * 0.5;
+    while (t + dash <= len - 0.006) {
+      const mx = p0x + ux * (t + dash / 2);
+      const my = p0y + uy * (t + dash / 2);
+      const mark = new THREE.Mesh(geo, mat);
+      mark.position.set(mx, y, -my);
+      mark.rotation.y = yaw;
+      mark.castShadow = false;
+      mark.receiveShadow = false;
+      g.add(mark);
+      t += dash + gap;
     }
   }
-  g.traverse((o) => {
-    if (o.isMesh) o.castShadow = true;
-  });
   return g;
 }
 
-let slimeTokenMap = null;
+let boardTokenTemplate = null;
+let tokenIconGeo = null;
+const tokenTextures = new Map();
+const textureLoader = new THREE.TextureLoader();
 
-function slimeTokenTexture() {
-  if (slimeTokenMap) return slimeTokenMap;
-  const size = 256;
-  const c = document.createElement("canvas");
-  c.width = size;
-  c.height = size;
-  const g = c.getContext("2d");
-  g.beginPath();
-  g.arc(128, 128, 126, 0, Math.PI * 2);
-  g.fillStyle = "#ffe7a0";
-  g.fill();
-  g.fillStyle = "#7adf4a";
-  g.beginPath();
-  g.ellipse(128, 146, 78, 64, 0, 0, Math.PI * 2);
-  g.fill();
-  const eye = (x, y) => {
-    g.fillStyle = "#ffffff";
-    g.beginPath();
-    g.arc(x, y, 16, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = "#1b2430";
-    g.beginPath();
-    g.arc(x + 2, y + 3, 7, 0, Math.PI * 2);
-    g.fill();
-  };
-  eye(104, 136);
-  eye(152, 136);
-  g.strokeStyle = "#c4456a";
-  g.lineWidth = 5;
-  g.lineCap = "round";
-  g.beginPath();
-  g.moveTo(106, 162);
-  g.quadraticCurveTo(128, 186, 150, 162);
-  g.stroke();
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
-  slimeTokenMap = tex;
-  return tex;
+function sharedIconGeo() {
+  if (!tokenIconGeo) tokenIconGeo = new THREE.PlaneGeometry(1, 1);
+  return tokenIconGeo;
 }
 
-/** Flat board token. The disc uses the drop color; the face is a slime. */
-export function makeToken(color = "#e6b325") {
-  const radius = 0.5;
-  const height = 0.05;
-  const g = new THREE.Group();
-  const disc = new THREE.Mesh(
-    new THREE.CylinderGeometry(radius, radius, height, 32),
-    new THREE.MeshStandardMaterial({
-      color,
-      roughness: 0.42,
-      metalness: 0.22,
-    })
-  );
-  disc.position.y = height / 2;
-  disc.castShadow = true;
-  disc.receiveShadow = true;
-  const face = new THREE.Mesh(
-    new THREE.CircleGeometry(radius * 0.84, 32),
+/** Longest side of the picture, kept inside the stitch. */
+const ICON_SPAN = 0.6;
+
+function fitIcon(icon, tex) {
+  const img = tex.image;
+  if (!img?.width || !img.height) return;
+  const aspect = img.width / img.height;
+  if (aspect >= 1) icon.scale.set(ICON_SPAN, ICON_SPAN / aspect, 1);
+  else icon.scale.set(ICON_SPAN * aspect, ICON_SPAN, 1);
+}
+
+function loadTokenTexture(url, onReady) {
+  let entry = tokenTextures.get(url);
+  if (!entry) {
+    const listeners = new Set();
+    const tex = textureLoader.load(url, (loaded) => {
+      loaded.colorSpace = THREE.SRGBColorSpace;
+      loaded.needsUpdate = true;
+      for (const fn of listeners) fn(loaded);
+      listeners.clear();
+    });
+    tex.colorSpace = THREE.SRGBColorSpace;
+    entry = { tex, listeners };
+    tokenTextures.set(url, entry);
+  }
+  if (onReady) {
+    if (entry.tex.image?.width) onReady(entry.tex);
+    else entry.listeners.add(onReady);
+  }
+  return entry.tex;
+}
+
+function addFacePicture(token, url) {
+  if (!url || typeof document === "undefined") return;
+  const icon = new THREE.Mesh(
+    sharedIconGeo(),
     new THREE.MeshBasicMaterial({
-      map: typeof document === "undefined" ? null : slimeTokenTexture(),
-      color: typeof document === "undefined" ? "#7adf4a" : "#ffffff",
+      transparent: true,
+      depthWrite: false,
+      alphaTest: 0.04,
     })
   );
-  face.rotation.x = -Math.PI / 2;
-  face.position.y = height + 0.004;
-  g.add(disc, face);
+  icon.name = "icon";
+  icon.rotation.x = -Math.PI / 2;
+  icon.position.y = 0.052;
+  icon.renderOrder = 3;
+  icon.raycast = () => {};
+  const apply = (tex) => {
+    icon.material.map = tex;
+    icon.material.needsUpdate = true;
+    fitIcon(icon, tex);
+  };
+  const tex = loadTokenTexture(url, apply);
+  if (tex.image?.width) apply(tex);
+  token.add(icon);
+}
+
+function buildBoardToken() {
+  const g = new THREE.Group();
+  g.userData.kind = "board-token";
+  const rim = octagonPrism(
+    0.55,
+    0.03,
+    new THREE.MeshBasicMaterial({ color: "#5e3b1e" })
+  );
+  const gold = octagonPrism(
+    0.52,
+    0.012,
+    new THREE.MeshBasicMaterial({ color: "#e9b53a" })
+  );
+  gold.position.y = 0.026;
+  const face = octagonPrism(
+    0.435,
+    0.008,
+    new THREE.MeshBasicMaterial({ color: "#fff7e8" })
+  );
+  face.position.y = 0.036;
+  face.userData.role = "face";
+  const stitch = stitchRing(0.4, 0.046);
+  g.add(rim, gold, face, stitch);
   return g;
+}
+
+/**
+ * Octagonal token. `faceUrl` is the picture drawn inside the stitch.
+ */
+export function makeBoardToken(faceUrl) {
+  if (!boardTokenTemplate) boardTokenTemplate = buildBoardToken();
+  const token = boardTokenTemplate.clone();
+  addFacePicture(token, faceUrl);
+  return token;
+}
+
+export function makeToken(color = "#e6b325") {
+  const token = makeBoardToken("/textures/tokens/slime.png");
+  token.userData.tint = color;
+  return token;
 }
 
 export function makeHighlight(color = "#fff3a8") {

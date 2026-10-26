@@ -11,11 +11,11 @@ const players = [
 describe("result notifications", () => {
   it("describes a grape pickup as points gained", () => {
     const lines = describeResults(
-      [{ type: "absorbFruit", playerId: "a", fruitType: "grapes", amount: 2, bouncedOver: false }],
+      [{ type: "absorbFruit", playerId: "a", fruitType: "grapes", amount: 1, bouncedOver: false }],
       players
     );
     assert.equal(lines[0].emoji, "🍇");
-    assert.equal(lines[0].text, "Pip picked up grapes and gained 2 points.");
+    assert.equal(lines[0].text, "Pip picked up grapes and gained 1 point.");
   });
 
   it("describes landing on a slime as a pickup", () => {
