@@ -144,17 +144,8 @@ export function buildBoard(playerCount, rand) {
   // Fruit and crystals only sit on open ground. A tree hex never holds one.
   const blocked = new Set();
   const fruitTypes = [];
-  for (let i = 0; i < plates; i++) {
-    fruitTypes.push(
-      "apple",
-      "apple",
-      "apple",
-      "banana",
-      "banana",
-      "banana",
-      "grapes",
-      "grapes"
-    );
+  for (let i = 0; i < playerCount; i++) {
+    fruitTypes.push("apple", "banana", "grapes");
   }
   const fruitKeys = takeClearings(map, startKeys, blocked, fruitTypes.length, rand);
   const fruits = fruitKeys.map((k, i) => {

@@ -6,6 +6,7 @@ import { Server } from "socket.io";
 import { io as ioc } from "socket.io-client";
 import { RoomManager } from "../server/rooms.js";
 import { attachSockets } from "../server/sockets.js";
+import { START_SLIME } from "../shared/constants.js";
 
 function client(port) {
   return ioc(`http://127.0.0.1:${port}`, {
@@ -126,9 +127,7 @@ describe("multiplayer rooms", () => {
     assert.equal(start.ok, true);
     const snap = await started;
     const racers = snap.state.players.filter((p) => !p.isSpectator);
-    const first = racers.find((p) => p.id === snap.state.turnPlayerId);
-    assert.equal(first.slime, 2);
-    assert.equal(racers.filter((p) => p.slime === 3).length, racers.length - 1);
+    assert.equal(racers.every((p) => p.slime === START_SLIME), true);
     a.close();
   });
 });

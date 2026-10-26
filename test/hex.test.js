@@ -26,7 +26,10 @@ describe("hex math", () => {
     assert.equal(hexCount(board.hexes), 35);
     assert.equal(board.starts.length, 3);
     assert.equal(board.captures.length, 3);
-    assert.equal(board.fruits.length, 8);
+    assert.equal(board.fruits.length, 9);
+    for (const type of ["apple", "banana", "grapes"]) {
+      assert.equal(board.fruits.filter((f) => f.type === type).length, 3);
+    }
     for (const [q, r] of [
       [0, -3],
       [0, 3],
@@ -125,6 +128,21 @@ describe("hex math", () => {
           });
           assert.equal(open, true, `${players} players seed ${seed}`);
         }
+      }
+    }
+  });
+
+  it("places one of each fruit and one crystal per player", () => {
+    for (const players of [2, 4, 5, 8, 9, 12]) {
+      const board = buildBoard(players, mulberry32(3));
+      assert.equal(board.captures.length, players, `${players} crystals`);
+      assert.equal(board.fruits.length, players * 3, `${players} fruit`);
+      for (const type of ["apple", "banana", "grapes"]) {
+        assert.equal(
+          board.fruits.filter((f) => f.type === type).length,
+          players,
+          `${players} ${type}`
+        );
       }
     }
   });

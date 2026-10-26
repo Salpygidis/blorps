@@ -122,7 +122,7 @@ export function describeResults(events = [], players = []) {
     } else if (ev.type === "firstPlayer") {
       lines.push({
         emoji: "🎲",
-        text: `${ev.name || playerName(players, ev.playerId)} goes first and starts with 1 less point.`,
+        text: `${ev.name || playerName(players, ev.playerId)} goes first.`,
       });
     } else if (ev.type === "win") {
       lines.push({

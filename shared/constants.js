@@ -1,4 +1,4 @@
-export const START_SLIME = 3;
+export const START_SLIME = 2;
 export const WIN_SLIME = 10;
 export const SIZE_SLOW_AT = 6;
 export const BASE_MOVE_SMALL = 2;

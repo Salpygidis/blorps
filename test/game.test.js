@@ -29,7 +29,7 @@ function twoPlayers(extra = {}) {
 }
 
 describe("core rules", () => {
-  it("gives a random player the first turn and one fewer point", () => {
+  it("gives a random player the first turn and the same starting goo", () => {
     const lobby = [
       { id: "a", name: "Pip" },
       { id: "b", name: "Goo" },
@@ -40,10 +40,10 @@ describe("core rules", () => {
       const g = Game.fromLobby(lobby, `SEED${i}`);
       const first = g.current();
       seen.add(first.id);
-      assert.equal(first.slime, START_SLIME - 1);
-      assert.equal(tally(first).points, START_SLIME - 1);
+      assert.equal(first.slime, START_SLIME);
+      assert.equal(tally(first).points, START_SLIME);
       for (const player of g.actors()) {
-        if (player.id !== first.id) assert.equal(player.slime, START_SLIME);
+        assert.equal(player.slime, START_SLIME);
       }
       assert.equal(g.events.some((ev) => ev.type === "firstPlayer" && ev.playerId === first.id), true);
     }
@@ -160,6 +160,7 @@ describe("core rules", () => {
     assert.equal(g.current().id, "b");
     g.playerById("a").q = 1;
     g.playerById("a").r = 0;
+    g.playerById("a").slime = START_SLIME;
     g.beginTurn(0);
     const after = g.playerById("a").slime;
     g.clickHex("a", 2, 0);

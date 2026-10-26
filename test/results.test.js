@@ -68,9 +68,9 @@ describe("result notifications", () => {
     );
   });
 
-  it("says who goes first and that they start a point down", () => {
+  it("says who goes first", () => {
     const lines = describeResults([{ type: "firstPlayer", playerId: "a", name: "Pip" }], players);
-    assert.equal(lines[0].text, "Pip goes first and starts with 1 less point.");
+    assert.equal(lines[0].text, "Pip goes first.");
   });
 
   it("describes a crystal draw from the power-up deck", () => {

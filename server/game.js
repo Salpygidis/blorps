@@ -28,7 +28,9 @@ import { buildBoard } from "./map.js";
  * Landing on another Blorp still offers Bounce or Bop. It does not hand them the slime.
  * Land on a slime token (anyone's): pick it up for +1 and one free bounce.
  * Free bounce: leave through one of the six sides and keep going, up to 2 hexes.
+ * The board places one apple, one banana, and one bunch of grapes per player.
  * Fruit stays in your tray: apple/banana 1, grapes 2.
+ * There is one crystal pool per player.
  * Every power-up you hold is worth 1. Apple Fan, Banana Bunch, and Grape Stomp
  * also add +1 for each of that fruit currently in your tray.
  * Points are the tray total. First to 10 wins. Slowing down and climbing use that total.
@@ -40,7 +42,7 @@ import { buildBoard } from "./map.js";
  * on the landing hex. A slime picked up while pushed does not grant a free bounce.
  * Goo Armor: the first bop against you each round steals nothing and pushes only 1.
  * Treehopper hops over a tree on a free bounce or a bop.
- * A random player goes first and starts with one fewer slime (1 less point).
+ * A random player goes first. Every racer starts with the same goo.
  * Food and tokens never respawn.
  */
 export class Game {
@@ -113,9 +115,8 @@ export class Game {
     const start = racers.length ? Math.floor(game.rand() * racers.length) : 0;
     const first = racers[start];
     if (first) {
-      first.slime = Math.max(1, START_SLIME - 1);
       game.events.push({ type: "firstPlayer", playerId: first.id, name: first.name });
-      game.note(`${first.name} goes first and starts with 1 less point.`);
+      game.note(`${first.name} goes first.`);
     }
     game.beginTurn(start);
     game.note("The race is on! First to 10 points wins.");

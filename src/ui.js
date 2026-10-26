@@ -371,7 +371,7 @@ export function showHow() {
     <h2>How to play</h2>
     <p>You are a cute ooze. First to <strong>10 points</strong> wins. The tray at the bottom right is everything you are holding. Add it up.</p>
     <ul>
-      <li>Each slime you hold is <strong>1 point</strong>. Start with 3. A random Blorp goes first and starts with one fewer slime. A turn that starts at <strong>6 points</strong> or more has 1 move. <strong>Zoomies</strong> lets that first step be a straight hop of 2 hexes. <strong>Long Reach</strong> adds 1 move while you have fewer than 6 points.</li>
+      <li>Each slime you hold is <strong>1 point</strong>. Everyone starts with 2. A random Blorp goes first. A turn that starts at <strong>6 points</strong> or more has 1 move. <strong>Zoomies</strong> lets that first step be a straight hop of 2 hexes. <strong>Long Reach</strong> adds 1 move while you have fewer than 6 points.</li>
       <li>Hold the pointer on a hex for a second to see everything there, including a slime standing on a crystal pool.</li>
       <li>Stepping up onto a higher hex costs 2 moves, or 1 if you have <strong>6 points</strong> or more. <strong>Slip-n-Slide</strong> leaves water for 1 move while you have fewer than 6 points, even uphill.</li>
       <li>On your turn, tap a glowing hex. You may change direction between steps. A Zoomies hop flies straight over the hex in the middle.</li>
@@ -381,9 +381,9 @@ export function showHow() {
       <li>A free bounce leaves through <strong>one of the six sides</strong> and keeps going straight, up to 2 hexes. You cannot turn.</li>
       <li>Land on a player: <strong>Bounce</strong> off them the same way, or <strong>Bop</strong> them up to 2 hexes in a straight line. Choose to steal 1 goo, or a random fruit from their tray. If that push lands on another Blorp, they get bumped 1 hex the same way. <strong>Goo Armor</strong> makes the first bop against you each round steal nothing and push only 1 hex.</li>
       <li>If you are pushed onto a hex, you do not drop goo. You do pick up fruit, slime, or a new crystal there. A slime you pick up while being pushed does not give a free bounce.</li>
-      <li>Apples and bananas in your tray are <strong>1 point</strong>. Grapes are <strong>2</strong>. Flying over fruit leaves it behind.</li>
+      <li>The board starts with one apple, one banana, and one bunch of grapes per player. Apples and bananas in your tray are <strong>1 point</strong>. Grapes are <strong>2</strong>. Flying over fruit leaves it behind.</li>
       <li>Every power-up you hold is <strong>1 point</strong>. <strong>Apple Fan</strong>, <strong>Banana Bunch</strong>, and <strong>Grape Stomp</strong> also add +1 for each of that fruit in your tray.</li>
-      <li>A crystal pool is a liquid tile with crystals printed on it. Land on one you have not used yet and draw the top card. The pool stays on the board, so other pieces can sit on it. Each pool works once for you.</li>
+      <li>There is one crystal pool per player. It is a liquid tile with crystals printed on it. Land on one you have not used yet and draw the top card. The pool stays on the board, so other pieces can sit on it. Each pool works once for you.</li>
     </ul>
     <p>Race solo with bots, or share a room code. Up to <strong>12</strong> racers. One foundation holds 2–4, two foundations hold 5–8, and four foundations hold 9–12. Spectators watch the board live.</p>
     <button class="btn primary" id="close-modal" type="button">Got it</button>
