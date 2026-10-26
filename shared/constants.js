@@ -32,7 +32,7 @@ export const COLORS = [
 export const FRUIT = {
   apple: { type: "apple", name: "Apple", value: 1, color: "#ff3b3b" },
   banana: { type: "banana", name: "Banana", value: 1, color: "#ffd93b" },
-  grapes: { type: "grapes", name: "Grapes", value: 2, color: "#9b59d0" },
+  grapes: { type: "grapes", name: "Grapes", value: 1, color: "#9b59d0" },
 };
 
 export const NAMES = [

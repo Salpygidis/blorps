@@ -24,12 +24,12 @@ import { buildBoard } from "./map.js";
  * Stepping onto a higher hex costs 2. At 6 points or more, climbing costs 1.
  * Slip-n-Slide: under 6 points, leaving water costs 1, even uphill.
  * First move of the turn: leave 1 slime token on the hex you started from (you always keep at least 1 slime).
- * You cannot jump back onto that starting hex during this turn. A longer bounce may fly over it. A later turn can.
+ * You cannot step straight back onto that hex with the next hop. A later hop, including a free bounce after your second move, can. A longer bounce may fly over it.
  * Landing on another Blorp still offers Bounce or Bop. It does not hand them the slime.
  * Land on a slime token (anyone's): pick it up for +1 and one free bounce.
  * Free bounce: leave through one of the six sides and keep going, up to 2 hexes.
  * The board places one apple, one banana, and one bunch of grapes per player.
- * Fruit stays in your tray: apple/banana 1, grapes 2.
+ * Fruit stays in your tray. Apples, bananas, and grapes are 1 point each.
  * There is one crystal pool per player.
  * Every power-up you hold is worth 1. Apple Fan, Banana Bunch, and Grape Stomp
  * also add +1 for each of that fruit currently in your tray.
@@ -148,7 +148,7 @@ export class Game {
     }));
     game.fruits = fruits.map((f, i) => ({
       id: f.id || `f${i}`,
-      value: f.type === "grapes" ? 2 : 1,
+      value: 1,
       ...f,
     }));
     game.captures = captures.map((c, i) => ({
@@ -441,6 +441,10 @@ export class Game {
         this.note(`${player.name} leaves a goo drop behind.`);
       }
       if (this.status !== "playing") return;
+    } else {
+      // The hop after the opening step has landed somewhere else.
+      // A later hop, including the free bounce from a slime, may return.
+      this.freshDrop = null;
     }
 
     this.tryClaimCapture(player, q, r);

@@ -21,17 +21,6 @@ import { SLIME_DROP_COLOR } from "../shared/constants.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
 
-/** Stable yaw so each puddle sits at its own angle. */
-function splatYaw(id) {
-  let h = 2166136261;
-  const s = String(id || "");
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return ((h >>> 0) % 360) * (Math.PI / 180);
-}
-
 export class GameScene {
   constructor(canvas) {
     this.canvas = canvas;
@@ -170,7 +159,7 @@ export class GameScene {
     this.blorps.set("demoA", a);
     this.blorps.set("demoB", b);
     const apple = makeFruit({ type: "apple" });
-    this.placeOnHex(apple, 1, 0, demo[1], 0.2);
+    this.placeOnHex(apple, 1, 0, demo[1], 0.02);
     this.scene.add(apple);
     this.look.set(0, 0, 0);
     this.target.copy(this.look);
@@ -358,12 +347,11 @@ export class GameScene {
       this.scene.add(m);
       return m;
     }, (m, f) => {
-      this.placeCollectible(m, f.q, f.r, 0.22);
+      this.placeCollectible(m, f.q, f.r, 0.02);
     });
 
     this.syncMap(this.tokens, state.slimes || [], (t) => {
       const m = makeToken(t.color || SLIME_DROP_COLOR);
-      m.rotation.y = splatYaw(t.id);
       this.scene.add(m);
       return m;
     }, (m, t) => {

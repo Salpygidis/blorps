@@ -22,12 +22,12 @@ Room state lives in the Node process memory. If the server restarts or sleeps, o
 - Hold the pointer on a hex for a second to read everything on it.
 - On your turn, tap a glowing hex. You may change direction between steps.
 - Trees block movement. You cannot stop on a tree or be bopped onto one. Treehopper lets a free bounce or a bop hop over a tree and land on a hex past it.
-- Your first move **leaves 1 slime** on the hex you started from. You cannot jump back onto that hex during this turn. Each slime you still hold is **1 point**.
+- Your first move **leaves 1 slime** on the hex you started from. You cannot jump straight back onto that hex with your next hop. A later hop can, including a free bounce after you land on a slime. Each slime you still hold is **1 point**.
 - Landing on a slime token (yours or anyone’s) puts it in your tray for **1 point** and gives a **free bounce**.
 - A free bounce leaves through **one of the six sides** and keeps going straight, up to **2 hexes**. You cannot turn.
 - Landing on another player: **Bounce** off them the same way, or **Bop** them (push up to 2 hexes in a straight line). A bop steals 1 goo, or a random fruit from their tray. A bop that lands on another Blorp bumps that Blorp 1 hex in the same direction. Goo Armor makes the first bop against you each round steal nothing and push only 1 hex.
 - A pushed Blorp does not drop goo. They pick up fruit, slime, or a new crystal on the hex they land on. A slime picked up while pushed does not give a free bounce. Flying over a hex still leaves it behind.
-- The board starts with one apple, one banana, and one bunch of grapes per player. Fruit stays in your tray when you **land** on it: apples and bananas **1** each, grapes **2**. Flying over it leaves it behind. Nothing respawns.
+- The board starts with one apple, one banana, and one bunch of grapes per player. Fruit stays in your tray when you **land** on it. Apples, bananas, and grapes are **1** each. Flying over it leaves it behind. Nothing respawns.
 - There is one crystal pool per player. Crystal pools are liquid tiles with a crystal print. They are a shared **power-up deck**. Hop on one you have not used and draw the top card. The pool stays on the board. Each pool works once per player. Every card you hold is worth **1 point**.
 - The tray at the bottom right lists your slimes, fruit, and cards with the points for each row. Add them up.
 - First to **10** points wins.
