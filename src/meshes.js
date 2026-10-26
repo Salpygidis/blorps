@@ -307,75 +307,142 @@ export function makeFruit(fruit) {
   return g;
 }
 
-let slimeTokenMap = null;
-
-function slimeTokenTexture() {
-  if (slimeTokenMap) return slimeTokenMap;
-  const size = 256;
-  const c = document.createElement("canvas");
-  c.width = size;
-  c.height = size;
-  const g = c.getContext("2d");
-  g.beginPath();
-  g.arc(128, 128, 126, 0, Math.PI * 2);
-  g.fillStyle = "#ffe7a0";
-  g.fill();
-  g.fillStyle = "#7adf4a";
-  g.beginPath();
-  g.ellipse(128, 146, 78, 64, 0, 0, Math.PI * 2);
-  g.fill();
-  const eye = (x, y) => {
-    g.fillStyle = "#ffffff";
-    g.beginPath();
-    g.arc(x, y, 16, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = "#1b2430";
-    g.beginPath();
-    g.arc(x + 2, y + 3, 7, 0, Math.PI * 2);
-    g.fill();
-  };
-  eye(104, 136);
-  eye(152, 136);
-  g.strokeStyle = "#c4456a";
-  g.lineWidth = 5;
-  g.lineCap = "round";
-  g.beginPath();
-  g.moveTo(106, 162);
-  g.quadraticCurveTo(128, 186, 150, 162);
-  g.stroke();
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
-  slimeTokenMap = tex;
-  return tex;
+function loopDelta(d) {
+  let x = d % 1;
+  if (x > 0.5) x -= 1;
+  if (x < -0.5) x += 1;
+  return x;
 }
 
-/** Flat board token. The disc uses the drop color; the face is a slime. */
+/** Radius of the slime splash at angle t (0..1 around the outline). */
+function splatRadius(t) {
+  const wobble =
+    0.04 * Math.sin(t * Math.PI * 2 * 2 + 0.4) +
+    0.025 * Math.sin(t * Math.PI * 2 * 5 + 1.4);
+  const lobe = (at, width, height) =>
+    Math.exp(-(loopDelta(t - at) ** 2) / width) * height;
+  return (
+    0.36 +
+    wobble +
+    lobe(0.06, 0.0028, 0.2) +
+    lobe(0.38, 0.0022, 0.15) +
+    lobe(0.74, 0.0018, 0.18)
+  );
+}
+
+/** Rounder mound in the middle of the splash. */
+function blobRadius(t) {
+  return (
+    0.3 +
+    0.045 * Math.sin(t * Math.PI * 2 * 2 + 0.2) +
+    0.025 * Math.sin(t * Math.PI * 2 * 4 + 1.1)
+  );
+}
+
+function outlineShape(scale, radiusFn) {
+  const steps = 48;
+  const shape = new THREE.Shape();
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const a = t * Math.PI * 2;
+    const r = radiusFn(t) * scale;
+    const x = Math.cos(a) * r;
+    const y = Math.sin(a) * r;
+    if (i === 0) shape.moveTo(x, y);
+    else shape.lineTo(x, y);
+  }
+  shape.closePath();
+  return shape;
+}
+
+function puddleGeometry(scale, depth, bevel = false, radiusFn = splatRadius) {
+  const bevelThickness = bevel ? Math.min(0.007, depth * 0.4) : 0;
+  const geo = new THREE.ExtrudeGeometry(outlineShape(scale, radiusFn), {
+    depth,
+    bevelEnabled: bevel,
+    bevelThickness,
+    bevelSize: bevel ? 0.018 * scale : 0,
+    bevelSegments: bevel ? 2 : 0,
+    curveSegments: 1,
+  });
+  geo.rotateX(-Math.PI / 2);
+  if (bevelThickness) geo.translate(0, bevelThickness, 0);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** Point just outside the puddle rim. Shape Y becomes world -Z. */
+function rimPoint(t, extra) {
+  const a = t * Math.PI * 2;
+  const r = splatRadius(t) + extra;
+  return { x: Math.cos(a) * r, z: -Math.sin(a) * r };
+}
+
+/**
+ * Flat slime left on a hex: a thin splash, a glossy center,
+ * a wet highlight, and a few droplets off the edge.
+ */
 export function makeToken(color = "#e6b325") {
-  const radius = 0.5;
-  const height = 0.05;
   const g = new THREE.Group();
-  const disc = new THREE.Mesh(
-    new THREE.CylinderGeometry(radius, radius, height, 32),
-    new THREE.MeshStandardMaterial({
-      color,
-      roughness: 0.42,
-      metalness: 0.22,
-    })
+  const goo = new THREE.Color(color);
+  const edge = goo.clone().multiplyScalar(0.78);
+  const shine = goo.clone().lerp(new THREE.Color("#fff8dc"), 0.62);
+  const gooMat = new THREE.MeshPhysicalMaterial({
+    color: goo,
+    roughness: 0.16,
+    metalness: 0.02,
+    clearcoat: 0.9,
+    clearcoatRoughness: 0.16,
+    emissive: goo,
+    emissiveIntensity: 0.16,
+  });
+  const edgeMat = new THREE.MeshStandardMaterial({
+    color: edge,
+    roughness: 0.38,
+    metalness: 0.02,
+    emissive: edge,
+    emissiveIntensity: 0.06,
+  });
+  const shineMat = new THREE.MeshBasicMaterial({
+    color: shine,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+
+  const spread = new THREE.Mesh(puddleGeometry(1.08, 0.012, false), edgeMat);
+  spread.receiveShadow = true;
+  const body = new THREE.Mesh(puddleGeometry(1, 0.028, true, blobRadius), gooMat);
+  body.position.y = 0.01;
+  body.castShadow = true;
+  body.receiveShadow = true;
+
+  const sheenGeo = new THREE.ShapeGeometry(outlineShape(0.62, blobRadius));
+  sheenGeo.rotateX(-Math.PI / 2);
+  const sheen = new THREE.Mesh(sheenGeo, shineMat);
+  sheen.position.set(-0.06, 0.046, 0.04);
+  sheen.raycast = () => {};
+
+  const droplet = (t, extra, radius) => {
+    const { x, z } = rimPoint(t, extra);
+    const drop = new THREE.Mesh(new THREE.SphereGeometry(radius, 12, 8), gooMat);
+    drop.scale.set(1.25, 0.22, 0.85);
+    drop.position.set(x, radius * 0.22, z);
+    drop.rotation.y = Math.atan2(-z, x);
+    drop.castShadow = true;
+    drop.receiveShadow = true;
+    return drop;
+  };
+
+  g.add(
+    spread,
+    body,
+    sheen,
+    droplet(0.07, 0.1, 0.075),
+    droplet(0.39, 0.09, 0.055),
+    droplet(0.71, 0.08, 0.05),
+    droplet(0.22, 0.07, 0.038)
   );
-  disc.position.y = height / 2;
-  disc.castShadow = true;
-  disc.receiveShadow = true;
-  const face = new THREE.Mesh(
-    new THREE.CircleGeometry(radius * 0.84, 32),
-    new THREE.MeshBasicMaterial({
-      map: typeof document === "undefined" ? null : slimeTokenTexture(),
-      color: typeof document === "undefined" ? "#7adf4a" : "#ffffff",
-    })
-  );
-  face.rotation.x = -Math.PI / 2;
-  face.position.y = height + 0.004;
-  g.add(disc, face);
   return g;
 }
 
