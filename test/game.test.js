@@ -569,6 +569,42 @@ describe("core rules", () => {
     assert.ok(g.captures[0].claimedBy.includes("b"));
   });
 
+  it("pays the opening slime drop before the landing counts", () => {
+    const apple = twoPlayers({
+      fruits: [{ id: "ap", q: 1, r: 0, type: "apple", value: 1 }],
+    });
+    const pip = apple.playerById("a");
+    pip.slime = WIN_SLIME - 1;
+    apple.clickHex("a", 1, 0);
+    assert.equal(apple.status, "playing");
+    assert.equal(pip.slime, WIN_SLIME - 2);
+    assert.equal(pip.basket[0].type, "apple");
+    assert.equal(tally(pip).points, WIN_SLIME - 1);
+    assert.equal(apple.slimes[0].q, 0);
+
+    const token = twoPlayers({
+      slimes: [{ id: "s1", q: 1, r: 0, ownerId: "b", color: "#fff" }],
+    });
+    const goo = token.playerById("a");
+    goo.slime = WIN_SLIME - 1;
+    token.clickHex("a", 1, 0);
+    assert.equal(token.status, "playing");
+    assert.equal(goo.slime, WIN_SLIME - 1);
+    assert.equal(tally(goo).points, WIN_SLIME - 1);
+
+    const bonus = twoPlayers({
+      fruits: [{ id: "ap2", q: 1, r: 0, type: "apple", value: 1 }],
+    });
+    const fan = bonus.playerById("a");
+    fan.slime = WIN_SLIME - 1;
+    fan.upgrades = [{ id: "applefan", name: "Apple Fan" }];
+    bonus.clickHex("a", 1, 0);
+    assert.equal(bonus.status, "finished");
+    assert.equal(bonus.winnerId, "a");
+    assert.equal(fan.slime, WIN_SLIME - 2);
+    assert.equal(tally(fan).points, WIN_SLIME + 1);
+  });
+
   it("wins at 10 points after touching every crystal", () => {
     const g = twoPlayers({
       captures: [
@@ -625,46 +661,38 @@ describe("core rules", () => {
     assert.equal(g.clickHex("b", 7, 0).ok, false);
   });
 
-  it("blocks trees unless Treehopper bounces over them", () => {
+  it("lets Treehopper move onto one tree per turn and bounce off it", () => {
+    const deck = twoPlayers();
+    const cards = [...deck.upgradeDeck, ...deck.upgradeDiscard];
+    assert.equal(cards.filter((c) => c.id === "treehopper").length, 1);
+
     const g = twoPlayers();
     g.playerById("a").q = 2;
     g.playerById("a").r = -1;
     g.beginTurn(0);
-    assert.equal(
-      g.legalHexes().some((h) => h.q === 3 && h.r === -1),
-      false
-    );
-    const blocked = g.clickHex("a", 3, -1);
-    assert.equal(blocked.ok, false);
-    assert.equal(g.playerById("a").q, 2);
-    assert.equal(g.playerById("a").r, -1);
-
-    g.phase = "bounce";
-    g.phaseData = { reason: "slime" };
-    const without = g.legalHexes();
-    assert.equal(
-      without.some((h) => h.q === 3 && h.r === -1),
-      false
-    );
-    assert.equal(
-      without.some((h) => h.q === 4 && h.r === -1),
-      false
-    );
-    g.playerById("a").upgrades.push({ id: "treehopper" });
-    const withUp = g.legalHexes();
-    assert.equal(
-      withUp.some((h) => h.q === 3 && h.r === -1),
-      false
-    );
-    assert.equal(
-      withUp.some((h) => h.q === 4 && h.r === -1),
-      true
-    );
+    assert.equal(g.legalHexes().some((h) => h.q === 3 && h.r === -1), false);
     assert.equal(g.clickHex("a", 3, -1).ok, false);
     assert.equal(g.playerById("a").q, 2);
+
+    g.playerById("a").upgrades.push({ id: "treehopper" });
+    assert.equal(g.legalHexes().some((h) => h.q === 3 && h.r === -1), true);
+    assert.equal(g.clickHex("a", 3, -1).ok, true);
+    assert.equal(g.playerById("a").q, 3);
+    assert.equal(g.playerById("a").r, -1);
+    assert.equal(g.phase, "bounce");
+    assert.equal(g.events.find((e) => e.type === "freeBounce").reason, "tree");
+    assert.equal(g.legalHexes().some((h) => h.q === 4 && h.r === -1), true);
     assert.equal(g.clickHex("a", 4, -1).ok, true);
     assert.equal(g.playerById("a").q, 4);
     assert.equal(g.playerById("a").r, -1);
+
+    g.hexes["4,0"].terrain = "tree";
+    assert.equal(g.legalHexes().some((h) => h.q === 4 && h.r === 0), false);
+
+    g.playerById("a").q = 2;
+    g.playerById("a").r = -1;
+    g.beginTurn(0);
+    assert.equal(g.legalHexes().some((h) => h.q === 3 && h.r === -1), true);
   });
 
   it("cannot bop a Blorp onto a tree", () => {
@@ -684,6 +712,9 @@ describe("core rules", () => {
     );
     const pushed = g.clickHex("a", 3, -1);
     assert.equal(pushed.ok, false);
+    g.playerById("a").upgrades.push({ id: "treehopper" });
+    assert.equal(g.legalHexes().some((h) => h.q === 3 && h.r === -1), false);
+    assert.equal(g.clickHex("a", 3, -1).ok, false);
     assert.equal(g.playerById("b").q, 2);
     assert.equal(g.playerById("b").r, 0);
   });
@@ -720,55 +751,51 @@ describe("core rules", () => {
     assert.equal(g.captures[0].claimedBy.length, 0);
   });
 
-  it("Slip-n-Slide leaves water uphill for 1 move", () => {
+  it("Slip-n-Slide treats one water step each turn as a free bounce", () => {
+    const plain = twoPlayers();
+    plain.playerById("a").q = 2;
+    plain.playerById("a").r = 0;
+    plain.beginTurn(0);
+    plain.clickHex("a", 2, 1);
+    assert.equal(plain.phase, "move");
+    assert.equal(plain.events.some((e) => e.type === "freeBounce"), false);
+
     const g = twoPlayers();
-    g.hexes["2,1"].elevation = -1;
     g.playerById("a").q = 2;
-    g.playerById("a").r = 1;
+    g.playerById("a").r = 0;
     g.playerById("a").upgrades.push({ id: "slider" });
     g.beginTurn(0);
-    assert.equal(g.remainingMove, 2);
-    g.clickHex("a", 2, 0);
+    assert.equal(g.clickHex("a", 2, 1).ok, true);
     assert.equal(g.playerById("a").q, 2);
-    assert.equal(g.playerById("a").r, 0);
-    assert.equal(g.remainingMove, 1);
-    assert.equal(g.current().id, "a");
+    assert.equal(g.playerById("a").r, 1);
+    assert.equal(g.phase, "bounce");
+    assert.equal(g.events.find((e) => e.type === "freeBounce").reason, "water");
+    assert.equal(g.clickHex("a", 2, -1).ok, true);
+    assert.equal(g.playerById("a").r, -1);
     assert.equal(g.phase, "move");
-    const slide = g.events.find((e) => e.type === "slide");
-    assert.ok(slide);
-    assert.equal(slide.movement, undefined);
 
-    const back = twoPlayers();
-    back.hexes["2,1"].elevation = -1;
-    back.playerById("a").q = 2;
-    back.playerById("a").r = 0;
-    back.playerById("a").upgrades.push({ id: "slider" });
-    back.beginTurn(0);
-    back.movedThisTurn = true;
-    back.remainingMove = 1;
-    back.clickHex("a", 2, 1);
-    assert.equal(back.playerById("a").r, 1);
-    assert.equal(back.events.some((e) => e.type === "slide"), false);
-    assert.equal(back.current().id, "b");
+    g.hexes["1,-1"].terrain = "water";
+    assert.equal(g.clickHex("a", 1, -1).ok, true);
+    assert.equal(g.playerById("a").q, 1);
+    assert.equal(g.playerById("a").r, -1);
+    assert.equal(g.events.some((e) => e.type === "freeBounce"), false);
 
-    const rich = twoPlayers();
-    const pip = rich.playerById("a");
-    pip.q = 2;
-    pip.r = 1;
-    pip.slime = 3;
-    pip.basket = [
-      { id: "f1", type: "apple", value: 1 },
-      { id: "f2", type: "grapes", value: 2 },
-    ];
-    pip.upgrades = [{ id: "slider" }];
-    rich.hexes["2,1"].elevation = -1;
-    rich.beginTurn(0);
-    assert.equal(tally(pip).points, 6);
-    assert.equal(rich.remainingMove, 1);
-    rich.clickHex("a", 2, 0);
-    assert.equal(rich.playerById("a").r, 0);
-    assert.equal(rich.events.some((e) => e.type === "slide"), false);
-    assert.equal(rich.current().id, "b");
+    g.playerById("a").q = 2;
+    g.playerById("a").r = 0;
+    g.hexes["2,0"].terrain = "open";
+    g.beginTurn(0);
+    assert.equal(g.clickHex("a", 2, 1).ok, true);
+    assert.equal(g.phase, "bounce");
+
+    const climb = twoPlayers();
+    climb.hexes["2,1"].elevation = -1;
+    climb.playerById("a").q = 2;
+    climb.playerById("a").r = 1;
+    climb.playerById("a").upgrades.push({ id: "slider" });
+    climb.beginTurn(0);
+    climb.movedThisTurn = true;
+    climb.remainingMove = 1;
+    assert.equal(climb.legalHexes().some((h) => h.q === 2 && h.r === 0), false);
   });
 
   it("Long Reach adds a move only while small", () => {
@@ -852,7 +879,7 @@ describe("core rules", () => {
     assert.equal(tally(held.playerById("a")).points, START_SLIME - 1 + 1 + 1 + 1);
   });
 
-  it("Treehopper bops past a tree and the deck has one copy", () => {
+  it("keeps one of each scoring card and will not bop through a tree", () => {
     const deck = twoPlayers();
     const cards = [...deck.upgradeDeck, ...deck.upgradeDiscard];
     assert.equal(cards.length, 12);
@@ -875,35 +902,35 @@ describe("core rules", () => {
 
     g.playerById("a").upgrades.push({ id: "treehopper" });
     assert.equal(g.legalHexes().some((h) => h.q === 3 && h.r === 0), false);
-    assert.equal(g.legalHexes().some((h) => h.q === 4 && h.r === 0), true);
-    assert.equal(g.clickHex("a", 4, 0).ok, true);
-    assert.equal(g.playerById("b").q, 4);
+    assert.equal(g.legalHexes().some((h) => h.q === 4 && h.r === 0), false);
+    assert.equal(g.clickHex("a", 4, 0).ok, false);
+    assert.equal(g.playerById("b").q, 2);
     assert.equal(g.playerById("b").r, 0);
   });
 
-  it("Goo Armor shrugs off the first bop each round", () => {
+  it("Bop Armor pushes without stealing slime or fruit", () => {
     const g = twoPlayers();
     g.playerById("a").q = 1;
     g.playerById("a").upgrades.push({ id: "superbounce" });
     g.playerById("b").q = 2;
     g.playerById("b").slime = 5;
+    g.playerById("b").basket = [{ id: "ap", type: "apple" }];
     g.playerById("b").upgrades.push({ id: "gooarmor" });
     g.beginTurn(0);
     g.clickHex("a", 2, 0);
     assert.equal(g.phase, "contact");
+    assert.equal(g.uiHints().armored, true);
     g.chooseContact("a", "bop");
-    assert.equal(g.uiHints().range, 1);
-    assert.equal(g.legalHexes().some((h) => h.q === 3 && h.r === 0), true);
-    assert.equal(g.legalHexes().some((h) => h.q === 4 && h.r === 0), false);
-    assert.equal(g.legalHexes().some((h) => h.q === 5 && h.r === 0), false);
-    g.clickHex("a", 3, 0);
-    assert.equal(g.playerById("b").q, 3);
+    assert.equal(g.uiHints().range, 3);
+    assert.equal(g.legalHexes().some((h) => h.q === 5 && h.r === 0), true);
+    g.clickHex("a", 5, 0);
+    assert.equal(g.playerById("b").q, 5);
     assert.equal(g.playerById("b").slime, 5);
+    assert.equal(g.playerById("b").basket[0].type, "apple");
     assert.equal(g.playerById("a").slime, START_SLIME - 1);
     assert.equal(g.events.find((e) => e.type === "bopSteal").stolen, 0);
     assert.equal(g.events.find((e) => e.type === "bopSteal").armored, true);
 
-    g.playerById("b").armorRound = g.roundIndex();
     g.slimes = [];
     g.playerById("a").q = 1;
     g.playerById("b").q = 2;
@@ -914,14 +941,14 @@ describe("core rules", () => {
     g.remainingMove = 1;
     const aBefore = g.playerById("a").slime;
     g.clickHex("a", 2, 0);
-    g.chooseContact("a", "bop");
+    g.chooseContact("a", "bop-fruit");
     assert.equal(g.uiHints().range, 3);
-    assert.equal(g.legalHexes().some((h) => h.q === 5 && h.r === 0), true);
-    g.clickHex("a", 5, 0);
-    assert.equal(g.playerById("b").q, 5);
-    assert.equal(g.playerById("b").slime, 4);
-    assert.equal(g.playerById("a").slime, aBefore + 1);
-    assert.equal(g.events.find((e) => e.type === "bopSteal").stolen, 1);
+    g.clickHex("a", 4, 0);
+    assert.equal(g.playerById("b").q, 4);
+    assert.equal(g.playerById("b").slime, 5);
+    assert.equal(g.playerById("a").slime, aBefore);
+    assert.equal(g.playerById("b").basket[0].id, "ap");
+    assert.equal(g.events.find((e) => e.type === "bopSteal").armored, true);
   });
 
   it("a pushed Blorp collects the landing hex without dropping or bouncing", () => {

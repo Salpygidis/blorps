@@ -22,8 +22,9 @@ import { buildBoard } from "./map.js";
  * Zoomies: the first move may be a straight hop of 2 hexes. 6+ points still starts with 1 move.
  * Long Reach: +1 movement while you have fewer than 6 points.
  * Stepping onto a higher hex costs 2. At 6 points or more, climbing costs 1.
- * Slip-n-Slide: under 6 points, leaving water costs 1, even uphill.
- * First move of the turn: leave 1 slime token on the hex you started from (you always keep at least 1 slime).
+ * Slip-n-Slide: once per turn, moving onto water is a free bounce.
+ * First move of the turn: leave 1 slime token on the hex you started from, and pay
+ * that point before anything on the landing hex counts. You always keep at least 1 slime.
  * You cannot step straight back onto that hex with the next hop. A later hop, including a free bounce after your second move, can. A longer bounce may fly over it.
  * Landing on another Blorp still offers Bounce or Bop. It does not hand them the slime.
  * Land on a slime token (anyone's): pick it up for +1 and one free bounce.
@@ -42,8 +43,8 @@ import { buildBoard } from "./map.js";
  * A bop that lands on another Blorp bumps that Blorp 1 hex in the same direction.
  * A pushed Blorp does not drop goo. They pick up fruit, slime, and a new crystal
  * on the landing hex. A slime picked up while pushed does not grant a free bounce.
- * Goo Armor: the first bop against you each round steals nothing and pushes only 1.
- * Treehopper hops over a tree on a free bounce or a bop.
+ * Bop Armor: a bop still pushes you, but it cannot steal slime or fruit.
+ * Treehopper: once per turn, move onto a tree and treat it as a free bounce.
  * A random player goes first. Every racer starts with the same goo.
  * Food and tokens never respawn.
  */
@@ -63,6 +64,8 @@ export class Game {
     this.remainingMove = 0;
     this.movedThisTurn = false;
     this.freshDrop = null;
+    this.treeHopUsed = false;
+    this.waterSlideUsed = false;
     this.winnerId = null;
     this.log = [];
     this.turnNumber = 0;
@@ -218,17 +221,6 @@ export class Game {
     return m;
   }
 
-  /** One lap of the table. Goo Armor refreshes when this changes. */
-  roundIndex() {
-    const n = Math.max(1, this.actors().length);
-    return Math.floor(Math.max(0, this.turnNumber - 1) / n);
-  }
-
-  armorReady(player) {
-    if (!player || !hasUpgrade(player, "gooarmor")) return false;
-    return player.armorRound !== this.roundIndex();
-  }
-
   bounceRange(p) {
     return hasUpgrade(p, "superbounce") ? 3 : BOUNCE_RANGE;
   }
@@ -247,6 +239,8 @@ export class Game {
     this.phaseData = {};
     this.movedThisTurn = false;
     this.freshDrop = null;
+    this.treeHopUsed = false;
+    this.waterSlideUsed = false;
     this.remainingMove = this.moveRange(p);
     this.note(`${p.name}'s turn · ${this.remainingMove} move${this.remainingMove === 1 ? "" : "s"}.`);
     if (this.legalHexes().length === 0) {
@@ -318,7 +312,10 @@ export class Game {
     if (err) return err;
     if (this.phase === "upgrade") return fail("Tap the card first.");
     if (this.phase === "contact") return fail("Choose Bounce or Bop.");
-    if (this.hexAt(q, r)?.terrain === "tree") {
+    if (
+      this.hexAt(q, r)?.terrain === "tree" &&
+      !this.legalHexes().some((h) => h.q === q && h.r === r)
+    ) {
       return fail("A tree blocks that hex.");
     }
     const player = this.current();
@@ -354,7 +351,7 @@ export class Game {
     if (this.phase !== "contact") return fail("No bounce/bop choice now.");
     const player = this.current();
     const other = this.playerById(this.phaseData.otherId);
-    const owedBounce = !!this.phaseData.pendingBounce;
+    const owedBounce = this.phaseData.bounceReason || (this.phaseData.pendingBounce ? "slime" : null);
     if (action === "bounce") {
       this.note(`${player.name} bounces off ${other?.name || "a Blorp"}!`);
       this.startFreeBounce(player, "player", {
@@ -365,9 +362,18 @@ export class Game {
       if (!other) return fail("They already wiggled away.");
       const steal = action === "bop-fruit" ? "fruit" : "slime";
       this.phase = "bop";
-      this.phaseData = { otherId: other.id, pendingBounce: owedBounce, steal };
-      const prize = steal === "fruit" ? "a fruit" : "a slime";
-      this.note(`${player.name} winds up a bop on ${other.name} for ${prize}!`);
+      this.phaseData = {
+        otherId: other.id,
+        pendingBounce: !!owedBounce,
+        bounceReason: owedBounce,
+        steal,
+      };
+      if (hasUpgrade(other, "gooarmor")) {
+        this.note(`${player.name} pushes ${other.name}. Bop Armor blocks the steal.`);
+      } else {
+        const prize = steal === "fruit" ? "a fruit" : "a slime";
+        this.note(`${player.name} winds up a bop on ${other.name} for ${prize}!`);
+      }
       if (this.legalHexes().length === 0) {
         this.stealFrom(player, other);
         this.note(`${other.name} has nowhere to fly.`);
@@ -413,6 +419,17 @@ export class Game {
 
   step(player, q, r, kind) {
     const from = { q: player.q, r: player.r };
+    const firstMain = kind === "move" && !this.movedThisTurn;
+    if (firstMain) {
+      this.leaveOpeningDrop(player, from);
+      this.movedThisTurn = true;
+      if (this.status !== "playing") return;
+    } else {
+      // The hop after the opening step has landed somewhere else.
+      // A later hop, including the free bounce from a slime, may return.
+      this.freshDrop = null;
+    }
+
     this.absorbFruit(player, q, r, false);
     if (this.status !== "playing") {
       player.q = q;
@@ -434,36 +451,19 @@ export class Game {
     if (kind === "move") {
       const cost = this.moveCost(player, from, { q, r });
       this.remainingMove = Math.max(0, this.remainingMove - cost);
-      this.noteSlide(player, from, { q, r });
     }
 
-    const firstMain = kind === "move" && !this.movedThisTurn;
-    if (firstMain) this.movedThisTurn = true;
-
-    const pendingBounce = this.absorbSlimeToken(player, q, r);
+    const slimeBounce = this.absorbSlimeToken(player, q, r);
     if (this.status !== "playing") return;
-
-    if (firstMain) {
-      const before = this.slimes.length;
-      this.placeSlime(player, from.q, from.r);
-      this.freshDrop = { q: Number(from.q), r: Number(from.r) };
-      if (this.slimes.length > before) {
-        this.addSlime(player, -1, "drop");
-        this.note(`${player.name} leaves a goo drop behind.`);
-      }
-      if (this.status !== "playing") return;
-    } else {
-      // The hop after the opening step has landed somewhere else.
-      // A later hop, including the free bounce from a slime, may return.
-      this.freshDrop = null;
-    }
+    const bounceReason = this.landingBounce(player, q, r, kind, !!slimeBounce);
 
     this.tryClaimCapture(player, q, r);
     if (this.status !== "playing") return;
     const other = this.occupant(q, r, player.id);
 
     if (this.phase === "upgrade") {
-      this.phaseData.pendingBounce = pendingBounce;
+      this.phaseData.bounceReason = bounceReason;
+      this.phaseData.pendingBounce = !!bounceReason;
       this.phaseData.pendingContact = !!other;
       if (other) this.phaseData.otherId = other.id;
       return;
@@ -471,14 +471,14 @@ export class Game {
 
     if (other) {
       this.phase = "contact";
-      this.phaseData = { otherId: other.id, pendingBounce };
+      this.phaseData = { otherId: other.id, pendingBounce: !!bounceReason, bounceReason };
       this.events.push({ type: "contact", playerId: player.id, otherId: other.id });
       this.note(`${player.name} splats into ${other.name}!`);
       return;
     }
 
-    if (pendingBounce) {
-      this.startFreeBounce(player, "slime");
+    if (bounceReason) {
+      this.startFreeBounce(player, bounceReason);
       return;
     }
 
@@ -506,7 +506,11 @@ export class Game {
     const why =
       reason === "player"
         ? `bounced off ${detail.otherName || "another Blorp"}`
-        : "picked up a slime";
+        : reason === "tree"
+          ? "hopped onto a tree"
+          : reason === "water"
+            ? "hopped onto the water"
+            : "picked up a slime";
     this.events.push({
       type: "freeBounce",
       playerId: player.id,
@@ -516,6 +520,16 @@ export class Game {
       otherName: detail.otherName,
     });
     this.note(`${player.name} gets a free bounce because they ${why}!`);
+  }
+
+  leaveOpeningDrop(player, from) {
+    const before = this.slimes.length;
+    this.placeSlime(player, from.q, from.r);
+    this.freshDrop = { q: Number(from.q), r: Number(from.r) };
+    if (this.slimes.length > before) {
+      this.addSlime(player, -1, "drop");
+      this.note(`${player.name} leaves a goo drop behind.`);
+    }
   }
 
   placeSlime(player, q, r) {
@@ -622,21 +636,28 @@ export class Game {
     return { ...card };
   }
 
-  noteSlide(player, from, to) {
-    if (!hasUpgrade(player, "slider") || this.pointTotal(player) >= SIZE_SLOW_AT) return;
-    const start = this.hexAt(from.q, from.r);
-    const dest = this.hexAt(to.q, to.r);
-    const climbing = (dest?.elevation ?? 0) > (start?.elevation ?? 0);
-    if (start?.terrain !== "water" || !climbing) return;
-    this.events.push({ type: "slide", playerId: player.id });
-    this.note(`${player.name} slides out of the water.`);
+  /**
+   * Once per turn, Treehopper or Slip-n-Slide turns that landing into a free bounce.
+   * A slime token on the same hex already supplies the bounce, so the water charge stays.
+   */
+  landingBounce(player, q, r, kind, slimeBounce) {
+    if (kind !== "move") return slimeBounce ? "slime" : null;
+    const terrain = this.hexAt(q, r)?.terrain;
+    if (terrain === "tree" && hasUpgrade(player, "treehopper") && !this.treeHopUsed) {
+      this.treeHopUsed = true;
+      return slimeBounce ? "slime" : "tree";
+    }
+    if (terrain === "water" && hasUpgrade(player, "slider") && !this.waterSlideUsed && !slimeBounce) {
+      this.waterSlideUsed = true;
+      return "water";
+    }
+    return slimeBounce ? "slime" : null;
   }
 
   stealFrom(actor, victim) {
     const stealFruit = this.phaseData?.steal === "fruit";
-    if (this.armorReady(victim)) {
-      victim.armorRound = this.roundIndex();
-      this.note(`${victim.name}'s Goo Armor holds — no steal!`);
+    if (hasUpgrade(victim, "gooarmor")) {
+      this.note(`${victim.name}'s Bop Armor holds — no steal!`);
       this.events.push({
         type: "bopSteal",
         actorId: actor.id,
@@ -703,10 +724,7 @@ export class Game {
     const line = hexLine(from, { q, r }).slice(1);
     for (const h of line) {
       const hex = this.hexAt(h.q, h.r);
-      if (hex?.terrain === "tree") {
-        if (sameHex(h, { q, r }) || !hasUpgrade(actor, "treehopper")) return;
-        continue;
-      }
+      if (hex?.terrain === "tree") return;
       if (!this.canLand(h.q, h.r, victim.id)) return;
       if (!sameHex(h, { q, r }) && this.occupant(h.q, h.r, victim.id)) return;
     }
@@ -791,13 +809,18 @@ export class Game {
     if (data.pendingContact && this.playerById(data.otherId)) {
       const other = this.playerById(data.otherId);
       this.phase = "contact";
-      this.phaseData = { otherId: other.id, pendingBounce: !!data.pendingBounce };
+      this.phaseData = {
+        otherId: other.id,
+        pendingBounce: !!(data.bounceReason || data.pendingBounce),
+        bounceReason: data.bounceReason || (data.pendingBounce ? "slime" : null),
+      };
       this.events.push({ type: "contact", playerId: player.id, otherId: other.id });
       this.note(`${player.name} splats into ${other.name}!`);
       return;
     }
-    if (data.pendingBounce) {
-      this.startFreeBounce(player, "slime");
+    const owed = data.bounceReason || (data.pendingBounce ? "slime" : null);
+    if (owed) {
+      this.startFreeBounce(player, owed);
       return;
     }
     if (this.remainingMove > 0) {
@@ -831,15 +854,12 @@ export class Game {
     return [];
   }
 
-  /** Flat and downhill cost 1. Climbing costs 2 under 6 points, or 1 at 6 points or more. Slip-n-Slide leaves water for 1. */
+  /** Flat and downhill cost 1. Climbing costs 2 under 6 points, or 1 at 6 points or more. */
   moveCost(player, from, to) {
     const start = this.hexAt(from.q, from.r);
     const dest = this.hexAt(to.q, to.r);
     const climbing = (dest?.elevation ?? 0) > (start?.elevation ?? 0);
-    if (climbing && this.pointTotal(player) < SIZE_SLOW_AT) {
-      if (hasUpgrade(player, "slider") && start?.terrain === "water") return 1;
-      return 2;
-    }
+    if (climbing && this.pointTotal(player) < SIZE_SLOW_AT) return 2;
     return 1;
   }
 
@@ -855,7 +875,9 @@ export class Game {
       out.push({ q: h.q, r: h.r });
     };
     for (const n of neighbors(p)) {
-      if (!this.canLand(n.q, n.r, p.id)) continue;
+      const ontoTree = this.hexAt(n.q, n.r)?.terrain === "tree";
+      if (ontoTree && !(hasUpgrade(p, "treehopper") && !this.treeHopUsed)) continue;
+      if (!this.canLand(n.q, n.r, p.id, { ignoreTrees: ontoTree })) continue;
       if (this.moveCost(p, p, n) > this.remainingMove) continue;
       add(n);
     }
@@ -865,7 +887,9 @@ export class Game {
         const far = { q: p.q + d.q * 2, r: p.r + d.r * 2 };
         const between = this.hexAt(mid.q, mid.r);
         if (!between || between.terrain === "tree") continue;
-        if (!this.canLand(far.q, far.r, p.id)) continue;
+        const ontoTree = this.hexAt(far.q, far.r)?.terrain === "tree";
+        if (ontoTree && !(hasUpgrade(p, "treehopper") && !this.treeHopUsed)) continue;
+        if (!this.canLand(far.q, far.r, p.id, { ignoreTrees: ontoTree })) continue;
         if (this.moveCost(p, p, far) > this.remainingMove) continue;
         add(far);
       }
@@ -875,7 +899,6 @@ export class Game {
 
   legalBounceHexes(p) {
     const range = this.bounceRange(p);
-    const hopper = hasUpgrade(p, "treehopper");
     const out = [];
     for (const d of DIRS) {
       for (let dist = 1; dist <= range; dist++) {
@@ -883,10 +906,7 @@ export class Game {
         if (!onFaceLine(p, h, range)) break;
         const hex = this.hexAt(h.q, h.r);
         if (!hex) break;
-        if (hex.terrain === "tree") {
-          if (!hopper) break;
-          continue;
-        }
+        if (hex.terrain === "tree") break;
         // The hex you just left is not a landing. A longer hop may still fly over it.
         if (this.isFreshDrop(h)) continue;
         out.push({ q: h.q, r: h.r });
@@ -899,7 +919,6 @@ export class Game {
     const victim = this.playerById(this.phaseData.otherId);
     if (!victim) return [];
     let range = this.bopRange(p);
-    if (this.armorReady(victim)) range = Math.min(range, 1);
     const out = [];
     const dirs = neighbors({ q: 0, r: 0 });
     for (const d of dirs) {
@@ -908,10 +927,7 @@ export class Game {
         if (!onFaceLine(victim, h, range)) break;
         const hex = this.hexAt(h.q, h.r);
         if (!hex) break;
-        if (hex.terrain === "tree") {
-          if (!hasUpgrade(p, "treehopper")) break;
-          continue;
-        }
+        if (hex.terrain === "tree") break;
         if (!this.canLand(h.q, h.r, victim.id)) break;
         if (sameHex(h, p)) break;
         const occ = this.occupant(h.q, h.r, victim.id);
@@ -937,18 +953,19 @@ export class Game {
         otherName: o?.name || "Blorp",
         otherColor: o?.color?.hex,
         fruitCount: o?.basket?.length || 0,
+        armored: hasUpgrade(o, "gooarmor"),
       };
     }
     if (this.phase === "bop") {
       const o = this.playerById(this.phaseData.otherId);
       let range = p ? this.bopRange(p) : BOP_RANGE;
-      if (this.armorReady(o)) range = Math.min(range, 1);
       return {
         kind: "bop",
         otherId: o?.id,
         otherName: o?.name || "Blorp",
         range,
         steal: this.phaseData?.steal || "slime",
+        armored: hasUpgrade(o, "gooarmor"),
       };
     }
     if (this.phase === "bounce") {

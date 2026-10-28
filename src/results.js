@@ -18,6 +18,8 @@ export function freeBounceWhy(ev) {
   if (ev?.reason === "player") {
     return `bounced off ${ev.otherName || "another Blorp"}`;
   }
+  if (ev?.reason === "tree") return "hopped onto a tree";
+  if (ev?.reason === "water") return "hopped onto the water";
   return "picked up a slime";
 }
 
@@ -62,11 +64,6 @@ export function describeResults(events = [], players = []) {
         emoji: "🫧",
         text: `${playerName(players, ev.token?.ownerId)} dropped a slime and lost 1 point.`,
       });
-    } else if (ev.type === "slide") {
-      lines.push({
-        emoji: "🌊",
-        text: `${playerName(players, ev.playerId)} slid out of the water.`,
-      });
     } else if (ev.type === "capture") {
       const card = ev.card?.name || "a power-up";
       lines.push({
@@ -109,7 +106,7 @@ export function describeResults(events = [], players = []) {
       } else if (steal?.armored) {
         lines.push({
           emoji: "🛡️",
-          text: `${actor} bopped ${target}, but ${target}'s armor held. No points stolen.`,
+          text: `${actor} bopped ${target}, but ${target}'s Bop Armor held. Nothing was stolen.`,
         });
       } else if (steal && steal.fruit === null) {
         lines.push({

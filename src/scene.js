@@ -713,7 +713,7 @@ export class GameScene {
       return;
     }
     const tile = hexTileOf(hits[0].object);
-    if (!tile || tile.userData.terrain === "tree") return;
+    if (!tile) return;
     const { q, r } = tile.userData;
     this.onHex(q, r);
   }
