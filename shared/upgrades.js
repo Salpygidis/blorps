@@ -9,13 +9,13 @@ export const UPGRADES = {
     id: "treehopper",
     name: "Treehopper",
     emoji: "🌳",
-    desc: "Free bounces and bops can hop over a tree and land on a hex past it.",
+    desc: "Once per turn, move onto a tree and treat it as a free bounce.",
   },
   slider: {
     id: "slider",
     name: "Slip-n-Slide",
     emoji: "🌊",
-    desc: "While you have fewer than 6 points, leaving water costs 1 move, even uphill.",
+    desc: "Once per turn, move onto a water tile and treat it as a free bounce.",
   },
   superbounce: {
     id: "superbounce",
@@ -43,9 +43,9 @@ export const UPGRADES = {
   },
   gooarmor: {
     id: "gooarmor",
-    name: "Goo Armor",
+    name: "Bop Armor",
     emoji: "🛡️",
-    desc: "The first bop against you each round steals nothing and pushes only 1 hex.",
+    desc: "When you are bopped, they push you but cannot steal slime or fruit.",
   },
   longreach: {
     id: "longreach",

@@ -84,12 +84,12 @@ describe("result notifications", () => {
     );
   });
 
-  it("describes a bounce over fruit, a drop, a slide, a bop, and a win", () => {
+  it("describes a bounce over fruit, a drop, a water bounce, a bop, and a win", () => {
     const lines = describeResults(
       [
         { type: "absorbFruit", playerId: "a", fruitType: "apple", amount: 1, bouncedOver: true },
         { type: "drop", token: { ownerId: "a" } },
-        { type: "slide", playerId: "a" },
+        { type: "freeBounce", playerId: "a", range: 2, reason: "water" },
         { type: "bop", actorId: "a", targetId: "b" },
         { type: "bopSteal", actorId: "a", targetId: "b", stolen: 1 },
         { type: "win", name: "Pip" },
@@ -103,7 +103,7 @@ describe("result notifications", () => {
       [
         "Pip bounced over an apple and gained 1 point.",
         "Pip dropped a slime and lost 1 point.",
-        "Pip slid out of the water.",
+        "Free bounce! Pip hopped onto the water, so they can hop up to 2 hexes in a straight line.",
         "Pip bopped Goo and stole 1 point.",
         "Pip reached 10 points and wins!",
       ]
@@ -131,7 +131,7 @@ describe("result notifications", () => {
       ],
       players
     );
-    assert.equal(armor[0].text, "Pip bopped Goo, but Goo's armor held. No points stolen.");
+    assert.equal(armor[0].text, "Pip bopped Goo, but Goo's Bop Armor held. Nothing was stolen.");
 
     const none = describeResults(
       [
