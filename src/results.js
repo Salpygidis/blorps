@@ -127,7 +127,9 @@ export function describeResults(events = [], players = []) {
     } else if (ev.type === "win") {
       lines.push({
         emoji: "🏆",
-        text: `${ev.name || playerName(players, ev.playerId)} reached ${ev.points ?? 10} points and wins!`,
+        text: `${ev.name || playerName(players, ev.playerId)} reached ${ev.points ?? 10} points${
+          Number.isFinite(ev.cards) ? ` with ${ev.cards} power-ups` : ""
+        } and wins!`,
       });
     }
   }

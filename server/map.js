@@ -24,25 +24,36 @@ export function startSpots(playerCount) {
   return STARTS[playerCount] || STARTS[2];
 }
 
-/** 2–4 players use one plate. 5–8 use two. 9–12 use four. */
+/** 2–5 players use one plate. 6–10 add a second plate on the short side. */
 export function foundationCount(playerCount) {
   const n = playerCount || 0;
-  if (n >= 9) return 4;
-  if (n >= 5) return 2;
+  if (n >= 6) return 2;
   return 1;
 }
 
 /**
  * Plate centers. A step of 6 in r puts the next foundation against the short
  * side of this one: the rims touch, and two hexes connect the islands.
+ * Four plates use that short step plus a step of (8, -4) along the long side,
+ * so they sit as a square instead of a row.
  */
+const LONG_STEP = { q: 8, r: -4 };
+/** Hexes the two long rims cover together. They are the walkway between columns. */
+const LONG_BRIDGE = [
+  { q: 4, r: -4 },
+  { q: 4, r: -3 },
+  { q: 4, r: -2 },
+  { q: 4, r: -1 },
+  { q: 4, r: 0 },
+];
+
 export function plateOrigins(count) {
   if (count >= 4) {
     return [
-      { q: 0, r: -9 },
-      { q: 0, r: -3 },
-      { q: 0, r: 3 },
-      { q: 0, r: 9 },
+      { q: -4, r: -1 },
+      { q: -4, r: 5 },
+      { q: 4, r: -5 },
+      { q: 4, r: 1 },
     ];
   }
   if (count === 2) {
@@ -84,10 +95,11 @@ export function buildBoard(playerCount, rand) {
       map[k] = { q, r, terrain: "open", elevation: 0, plate };
     }
   });
+  addLongBridges(map, origins);
 
   const seam = seamKeys(map);
   const starts =
-    origins.length === 1
+    origins.length === 1 && startSpots(playerCount).length >= playerCount
       ? startSpots(playerCount).map((s) => ({ q: s.q, r: s.r }))
       : spreadStarts(map, playerCount, rand);
   const startKeys = new Set(starts.map((s) => key(s.q, s.r)));
@@ -163,9 +175,9 @@ export function buildBoard(playerCount, rand) {
     map,
     startKeys,
     blocked,
-    playerCount,
+    origins.length * 2,
     rand,
-    (c) => !origins.some((origin) => origin.q === c.q && origin.r === c.r)
+    (c) => (c.elevation || 0) === 0 && !origins.some((origin) => origin.q === c.q && origin.r === c.r)
   );
   const captures = capKeys.map((k, i) => ({
     id: `c${i}`,
@@ -184,6 +196,20 @@ export function buildBoard(playerCount, rand) {
     starts,
     foundations: origins,
   };
+}
+
+function addLongBridges(map, origins) {
+  for (const origin of origins) {
+    const next = origins.some((o) => o.q === origin.q + LONG_STEP.q && o.r === origin.r + LONG_STEP.r);
+    if (!next) continue;
+    for (const step of LONG_BRIDGE) {
+      const q = origin.q + step.q;
+      const r = origin.r + step.r;
+      const k = key(q, r);
+      if (map[k]) continue;
+      map[k] = { q, r, terrain: "open", elevation: 0, plate: -1 };
+    }
+  }
 }
 
 function seamKeys(map) {

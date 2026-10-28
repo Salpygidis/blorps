@@ -1,12 +1,49 @@
 let ctx;
 let muted = false;
+let volume = 1;
+let lastAudible = 1;
 
+const VOLUME_KEY = "blorps.volume";
 const BGM_URL = "/blorps-bgm.mp3";
 const BGM_VOLUME = 0.35;
 const bgm = new Audio(BGM_URL);
 bgm.loop = true;
 bgm.preload = "auto";
-bgm.volume = BGM_VOLUME;
+
+function clampVolume(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(1, Math.max(0, n));
+}
+
+function readStoredVolume() {
+  try {
+    const raw = localStorage.getItem(VOLUME_KEY);
+    if (raw == null || raw === "") return;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return;
+    volume = clampVolume(n);
+    if (volume > 0) lastAudible = volume;
+    muted = volume === 0;
+  } catch {
+    /* private mode */
+  }
+}
+
+function storeVolume() {
+  try {
+    localStorage.setItem(VOLUME_KEY, String(volume));
+  } catch {
+    /* private mode */
+  }
+}
+
+function applyBgmVolume() {
+  bgm.volume = BGM_VOLUME * volume;
+}
+
+readStoredVolume();
+applyBgmVolume();
 
 let wantBgm = false;
 let primed = false;
@@ -39,9 +76,23 @@ function ac() {
   return ctx;
 }
 
-export function setMuted(v) {
-  muted = v;
+/** Master level from 0 to 1. Zero mutes music and effects. */
+export function getVolume() {
+  return volume;
+}
+
+export function setVolume(v) {
+  const next = clampVolume(v);
+  if (next > 0) lastAudible = next;
+  volume = next;
+  muted = next === 0;
+  storeVolume();
+  applyBgmVolume();
   syncBgm();
+}
+
+export function setMuted(v) {
+  setVolume(v ? 0 : lastAudible || 1);
 }
 
 export function isMuted() {
@@ -49,13 +100,14 @@ export function isMuted() {
 }
 
 function beep(freq, dur, type = "sine", gain = 0.07) {
-  if (muted) return;
+  const level = gain * volume;
+  if (muted || level <= 0.001) return;
   const c = ac();
   const o = c.createOscillator();
   const g = c.createGain();
   o.type = type;
   o.frequency.value = freq;
-  g.gain.setValueAtTime(gain, c.currentTime);
+  g.gain.setValueAtTime(level, c.currentTime);
   g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
   o.connect(g);
   g.connect(c.destination);
@@ -84,7 +136,8 @@ export function sfx(kind) {
 }
 
 function boing() {
-  if (muted) return;
+  const peak = 0.08 * volume;
+  if (muted || peak <= 0.001) return;
   const c = ac();
   const t = c.currentTime;
   const o = c.createOscillator();
@@ -95,7 +148,7 @@ function boing() {
   o.frequency.exponentialRampToValueAtTime(280, t + 0.2);
   o.frequency.exponentialRampToValueAtTime(988, t + 0.32);
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(0.08, t + 0.03);
+  g.gain.exponentialRampToValueAtTime(peak, t + 0.03);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
   o.connect(g);
   g.connect(c.destination);
@@ -116,7 +169,6 @@ export function unlockAudio() {
   }
   if (priming) return;
   priming = true;
-  const resume = bgm.volume;
   bgm.volume = 0;
   const pending = bgm.play();
   const finish = () => {
@@ -126,14 +178,14 @@ export function unlockAudio() {
     } catch {
       /* not seekable yet */
     }
-    bgm.volume = resume;
+    applyBgmVolume();
     priming = false;
     primed = true;
     syncBgm();
   };
   if (pending && typeof pending.then === "function") {
     pending.then(finish).catch(() => {
-      bgm.volume = resume;
+      applyBgmVolume();
       priming = false;
     });
   } else {

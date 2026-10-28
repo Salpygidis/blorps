@@ -1,7 +1,7 @@
 import { onFaceLine } from "../shared/hex.js";
 import { socket, emit } from "./net.js";
 import { GameScene } from "./scene.js";
-import { sfx, setMuted, isMuted, unlockAudio, setMatchMusic } from "./audio.js";
+import { sfx, setMuted, setVolume, getVolume, unlockAudio, setMatchMusic } from "./audio.js";
 import {
   els,
   randomName,
@@ -73,10 +73,28 @@ els.btnEnd.onclick = () => {
     if (res.error) toast(res.error);
   });
 };
+function syncSoundUi() {
+  const level = Math.round(getVolume() * 100);
+  if (els.volume) els.volume.value = String(level);
+  const quiet = level === 0;
+  els.btnMute.textContent = quiet ? "🔇" : "🔊";
+  els.btnMute.setAttribute("aria-label", quiet ? "Unmute" : "Mute");
+}
+
+syncSoundUi();
+
 els.btnMute.onclick = () => {
-  setMuted(!isMuted());
-  els.btnMute.textContent = isMuted() ? "🔇" : "🔊";
+  setMuted(getVolume() > 0);
+  syncSoundUi();
 };
+
+els.volume?.addEventListener("input", () => {
+  setVolume(Number(els.volume.value) / 100);
+  syncSoundUi();
+});
+els.volume?.addEventListener("change", () => {
+  if (getVolume() > 0) sfx("click");
+});
 
 els.actionBar.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-act]");

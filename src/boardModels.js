@@ -1,6 +1,12 @@
 import * as THREE from "three";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
-import { FOUNDATION_PITCH } from "../shared/boardFit.js";
+import { HEX_SIZE, hexRound, hexToWorld, key } from "../shared/hex.js";
+import {
+  FOUNDATION_FLOOR_Y,
+  FOUNDATION_PITCH,
+  FOUNDATION_RIM_Y,
+  foundationPose,
+} from "../shared/boardFit.js";
 
 export const TOP_NY = 0.5;
 export const LIQUID_TOP = 0.75;
@@ -68,6 +74,71 @@ export function topCapGeometry(geometry, yFraction, { repeat = 0 } = {}) {
   cap.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   cap.computeVertexNormals();
   return cap;
+}
+
+const FLOOR_TOP = (FOUNDATION_FLOOR_Y + FOUNDATION_RIM_Y) / 2;
+
+function modelPointToHex(x, z, origin) {
+  const pose = foundationPose();
+  const cos = Math.cos(pose.yaw);
+  const sin = Math.sin(pose.yaw);
+  const base = hexToWorld(origin?.q || 0, origin?.r || 0);
+  const wx = pose.x + base.x + (x * cos + z * sin) * pose.scale;
+  const wz = pose.z + base.z + (-x * sin + z * cos) * pose.scale;
+  const r = wz / (HEX_SIZE * 1.5);
+  const q = wx / (HEX_SIZE * Math.sqrt(3)) - r / 2;
+  return hexRound(q, r);
+}
+
+/**
+ * Drop the flat hex pad under a water, crystal, or hill tile. The rim around
+ * the socket stays. The shared source geometry is left alone.
+ */
+export function withoutTileFloors(geometry, origin, tiledKeys) {
+  if (!geometry || !tiledKeys?.size) return geometry;
+  const pos = geometry.attributes.position;
+  const index = geometry.index;
+  const uv = geometry.attributes.uv;
+  const count = index ? index.count : pos.count;
+  const positions = [];
+  const uvs = [];
+  const read = (slot) => {
+    const vi = index ? index.getX(slot) : slot;
+    return [
+      pos.getX(vi),
+      pos.getY(vi),
+      pos.getZ(vi),
+      uv ? uv.getX(vi) : 0,
+      uv ? uv.getY(vi) : 0,
+    ];
+  };
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  const fn = new THREE.Vector3();
+  for (let i = 0; i < count; i += 3) {
+    const a = read(i);
+    const b = read(i + 1);
+    const c = read(i + 2);
+    const y = (a[1] + b[1] + c[1]) / 3;
+    ab.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    ac.set(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
+    fn.crossVectors(ab, ac);
+    const len = fn.length() || 1;
+    const flat = Math.abs(fn.y) / len >= TOP_NY;
+    if (flat && y >= FOUNDATION_FLOOR_Y - 0.45 && y < FLOOR_TOP) {
+      const hex = modelPointToHex((a[0] + b[0] + c[0]) / 3, (a[2] + b[2] + c[2]) / 3, origin);
+      if (tiledKeys.has(key(hex.q, hex.r))) continue;
+    }
+    for (const v of [a, b, c]) {
+      positions.push(v[0], v[1], v[2]);
+      if (uv) uvs.push(v[3], v[4]);
+    }
+  }
+  const next = new THREE.BufferGeometry();
+  next.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  if (uv) next.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  next.computeVertexNormals();
+  return next;
 }
 
 function photoMaterial(map) {

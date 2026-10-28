@@ -42,6 +42,7 @@ export const els = {
   actionBar: $("action-bar"),
   btnEnd: $("btn-end"),
   btnMute: $("btn-mute"),
+  volume: $("volume"),
   btnHelp: $("btn-help"),
   toast: $("toast"),
   hexTip: $("hex-tip"),
@@ -369,7 +370,7 @@ function renderActions(state, me) {
 export function showHow() {
   els.modalBody.innerHTML = `
     <h2>How to play</h2>
-    <p>You are a cute ooze. First to <strong>10 points</strong> wins. The tray at the bottom right is everything you are holding. Add it up.</p>
+    <p>You are a cute ooze. First to <strong>10 points</strong> wins, and only after you have touched <strong>every crystal</strong>. The tray at the bottom right is everything you are holding. Add it up.</p>
     <ul>
       <li>Each slime you hold is <strong>1 point</strong>. Everyone starts with 2. A random Blorp goes first. A turn that starts at <strong>6 points</strong> or more has 1 move. <strong>Zoomies</strong> lets that first step be a straight hop of 2 hexes. <strong>Long Reach</strong> adds 1 move while you have fewer than 6 points.</li>
       <li>Hold the pointer on a hex for a second to see everything there, including a slime standing on a crystal pool.</li>
@@ -383,9 +384,9 @@ export function showHow() {
       <li>If you are pushed onto a hex, you do not drop goo. You do pick up fruit, slime, or a new crystal there. A slime you pick up while being pushed does not give a free bounce.</li>
       <li>The board starts with one apple, one banana, and one bunch of grapes per player. Each fruit in your tray is <strong>1 point</strong>. Flying over fruit leaves it behind.</li>
       <li>Every power-up you hold is <strong>1 point</strong>. <strong>Apple Fan</strong>, <strong>Banana Bunch</strong>, and <strong>Grape Stomp</strong> also add +1 for each of that fruit in your tray.</li>
-      <li>There is one crystal pool per player. It is a liquid tile with crystals printed on it. Land on one you have not used yet and draw the top card. The pool stays on the board, so other pieces can sit on it. Each pool works once for you.</li>
+      <li>Each foundation has <strong>two crystal pools</strong>. A pool is a liquid tile with crystals printed on it. Land on one you have not used yet and draw the top card. Touch <strong>every crystal</strong> on the board, and reach 10 points, to win. Each pool works once for you.</li>
     </ul>
-    <p>Race solo with bots, or share a room code. Up to <strong>12</strong> racers. One foundation holds 2–4, two foundations hold 5–8, and four foundations hold 9–12. Spectators watch the board live.</p>
+    <p>Race solo with bots, or share a room code. Up to <strong>10</strong> racers. One foundation holds 2–5, and 6–10 add a second. Spectators watch the board live.</p>
     <button class="btn primary" id="close-modal" type="button">Got it</button>
   `;
   els.modal.classList.remove("hidden");
@@ -430,7 +431,7 @@ export function showWin(state, me) {
   els.modalBody.innerHTML = `
     <div class="win-art">🏆</div>
     <h2>${escapeHtml(w?.name || "A Blorp")} wins!</h2>
-    <p>First to 10 goo. Rematch?</p>
+    <p>First to 10 points, after touching every crystal. Rematch?</p>
     ${host ? `<button class="btn primary" id="btn-again" type="button">Play again</button>` : `<p class="muted">Waiting for the host…</p>`}
     <button class="btn ghost" id="close-modal" type="button">Close</button>
   `;

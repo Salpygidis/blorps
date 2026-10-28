@@ -30,10 +30,12 @@ import { buildBoard } from "./map.js";
  * Free bounce: leave through one of the six sides and keep going, up to 2 hexes.
  * The board places one apple, one banana, and one bunch of grapes per player.
  * Fruit stays in your tray. Apples, bananas, and grapes are 1 point each.
- * There is one crystal pool per player.
+ * Each foundation has two crystal pools. Touch every crystal on the board to win.
  * Every power-up you hold is worth 1. Apple Fan, Banana Bunch, and Grape Stomp
  * also add +1 for each of that fruit currently in your tray.
- * Points are the tray total. First to 10 wins. Slowing down and climbing use that total.
+ * Points are the tray total. First to 10 wins, and only after touching every
+ * crystal on the board. Each foundation has two crystals. Slowing down and
+ * climbing use the point total.
  * A new crystal draws the top power-up card. Each player draws once per crystal.
  * Land on a player: Bounce (same free bounce) or Bop (push up to 2 straight).
  * A bop steals 1 slime, or a random fruit from their tray if you choose that.
@@ -119,7 +121,7 @@ export class Game {
       game.note(`${first.name} goes first.`);
     }
     game.beginTurn(start);
-    game.note("The race is on! First to 10 points wins.");
+    game.note("The race is on! First to 10 points wins, once you have touched every crystal.");
     return game;
   }
 
@@ -279,16 +281,25 @@ export class Game {
     this.checkScore(player);
   }
 
-  /** Win by the tray total. */
+  /** Win at 10 points after touching every crystal. */
   checkScore(player) {
     if (!player || player.isSpectator || this.status !== "playing") return;
     const points = this.pointTotal(player);
-    if (points < WIN_SLIME) return;
+    const touchedAll = (this.captures || []).every(
+      (c) =>
+        (c.claimedBy || []).includes(player.id) || (player.claimedCaptures || []).includes(c.id)
+    );
+    if (points < WIN_SLIME || !touchedAll) return;
     this.status = "finished";
     this.phase = "over";
     this.winnerId = player.id;
-    this.note(`${player.name} counts ${points} points and wins!`);
-    this.events.push({ type: "win", playerId: player.id, name: player.name, points });
+    this.note(`${player.name} counts ${points} points, has touched every crystal, and wins!`);
+    this.events.push({
+      type: "win",
+      playerId: player.id,
+      name: player.name,
+      points,
+    });
   }
 
   assertActor(playerId) {
@@ -998,6 +1009,7 @@ export class Game {
       remainingMove: this.remainingMove,
       movedThisTurn: this.movedThisTurn,
       winnerId: this.winnerId,
+      winPoints: WIN_SLIME,
       log: this.log.slice(-12),
       turnNumber: this.turnNumber,
       version: this.version,

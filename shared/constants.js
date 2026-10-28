@@ -1,13 +1,14 @@
 export const START_SLIME = 2;
 export const WIN_SLIME = 10;
+
 export const SIZE_SLOW_AT = 6;
 export const BASE_MOVE_SMALL = 2;
 export const BASE_MOVE_BIG = 1;
 export const BOUNCE_RANGE = 2;
 export const BOP_RANGE = 2;
-export const MAX_PLAYERS = 12;
+export const MAX_PLAYERS = 10;
 export const MIN_PLAYERS = 2;
-export const MAX_BOTS = 11;
+export const MAX_BOTS = 9;
 export const MAX_SPECTATORS = 12;
 export const ROOM_CODE_LEN = 4;
 export const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
