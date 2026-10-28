@@ -444,17 +444,33 @@ export function makeToken(color = "#e6b325") {
   return token;
 }
 
-export function makeHighlight(color = "#fff3a8") {
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(HEX_SIZE * 0.55, HEX_SIZE * 0.78, 6),
-    new THREE.MeshBasicMaterial({
-      color,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.85,
-    })
-  );
-  ring.rotation.x = -Math.PI / 2;
-  ring.rotation.z = Math.PI / 6;
-  return ring;
+export function makeHighlight() {
+  const group = new THREE.Group();
+  group.rotation.x = -Math.PI / 2;
+  group.rotation.z = Math.PI / 6;
+  const lay = (inner, outer, material, order, lift) => {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(inner, outer, 6), material);
+    ring.position.z = lift;
+    ring.renderOrder = order;
+    group.add(ring);
+    return ring;
+  };
+  const black = new THREE.MeshBasicMaterial({
+    color: "#111111",
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false,
+  });
+  const white = new THREE.MeshBasicMaterial({
+    color: "#ffffff",
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.38,
+    depthWrite: false,
+  });
+  lay(HEX_SIZE * 0.46, HEX_SIZE * 0.94, black, 2, 0.02);
+  lay(HEX_SIZE * 0.56, HEX_SIZE * 0.84, white, 3, 0.04);
+  group.userData.pulse = white;
+  return group;
 }

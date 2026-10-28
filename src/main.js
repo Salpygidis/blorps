@@ -12,6 +12,7 @@ import {
   showHow,
   showCard,
   showWin,
+  showYourTurn,
   hideModal,
 } from "./ui.js";
 
@@ -32,6 +33,16 @@ let lastState = null;
 let lastLobby = null;
 let shownUpgrade = null;
 let shownWin = false;
+let announcedTurn = "";
+
+scene.onTurnReady = (state) => {
+  if (!state || state.status !== "playing" || session.isSpectator) return;
+  if (state.turnPlayerId !== session.playerId) return;
+  const mark = `${state.roomCode}:${state.turnNumber}`;
+  if (announcedTurn === mark) return;
+  announcedTurn = mark;
+  showYourTurn();
+};
 
 scene.onHex = (q, r) => {
   if (!lastState || lastState.status !== "playing") return;

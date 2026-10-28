@@ -132,7 +132,36 @@ export function sfx(kind) {
     beep(880, 0.12, "triangle", 0.05);
   } else if (kind === "freebounce") {
     boing();
+  } else if (kind === "turn") {
+    ding();
   }
+}
+
+function ding() {
+  const peak = 0.09 * volume;
+  if (muted || peak <= 0.001) return;
+  const c = ac();
+  const t = c.currentTime;
+  const bell = c.createOscillator();
+  const over = c.createOscillator();
+  const g = c.createGain();
+  const g2 = c.createGain();
+  bell.type = "sine";
+  over.type = "triangle";
+  bell.frequency.setValueAtTime(1174, t);
+  over.frequency.setValueAtTime(1760, t);
+  g.gain.setValueAtTime(peak, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+  g2.gain.setValueAtTime(peak * 0.28, t);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+  bell.connect(g);
+  over.connect(g2);
+  g.connect(c.destination);
+  g2.connect(c.destination);
+  bell.start(t);
+  over.start(t);
+  bell.stop(t + 0.72);
+  over.stop(t + 0.42);
 }
 
 function boing() {

@@ -23,7 +23,7 @@ describe("hex math", () => {
 
   it("builds an island of full hexes only", () => {
     const board = buildBoard(3, mulberry32(42));
-    assert.equal(hexCount(board.hexes), 35);
+    assert.equal(hexCount(board.hexes), 39);
     assert.equal(board.starts.length, 3);
     assert.equal(board.captures.length, 2);
     assert.equal(board.fruits.length, 9);
@@ -31,10 +31,20 @@ describe("hex math", () => {
       assert.equal(board.fruits.filter((f) => f.type === type).length, 3);
     }
     for (const [q, r] of [
+      [3, -4],
+      [-3, -1],
+      [3, 1],
+      [-3, 4],
+    ]) {
+      assert.ok(board.hexes[key(q, r)], `${q},${r} is a full foundation hex`);
+    }
+    for (const [q, r] of [
       [0, -3],
       [0, 3],
       [4, -2],
       [-4, 2],
+      [2, -4],
+      [-2, 4],
     ]) {
       assert.equal(board.hexes[key(q, r)], undefined);
     }
@@ -108,6 +118,7 @@ describe("hex math", () => {
         for (const item of board.captures) {
           assert.equal(board.hexes[key(item.q, item.r)].elevation || 0, 0, `${item.id} on a hill`);
         }
+        assertPlateQuotas(board, players, seed);
       }
     }
   });
@@ -159,13 +170,13 @@ describe("hex math", () => {
     assert.equal(one.foundations.length, 1);
     assert.equal(one.captures.length, 2);
     assert.equal(new Set(one.starts.map((s) => key(s.q, s.r))).size, 5);
-    assert.equal(hexCount(one.hexes), 35);
+    assert.equal(hexCount(one.hexes), 39);
 
     const two = buildBoard(6, mulberry32(7));
     assert.equal(two.foundations.length, 2);
     assert.deepEqual(two.foundations, plateOrigins(2));
     assert.equal(two.captures.length, 4);
-    assert.equal(hexCount(two.hexes), 35 * 2);
+    assert.equal(hexCount(two.hexes), 39 * 2);
     assert.equal(linkedPlates(two), true);
 
     const ten = buildBoard(10, mulberry32(9));
@@ -193,4 +204,38 @@ function linkedPlates(board) {
     }
   }
   return seen.size === open.length;
+}
+
+function nearestPlate(cell, origins) {
+  let best = 0;
+  let bestD = Infinity;
+  origins.forEach((origin, i) => {
+    const d = distance(cell, origin);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  });
+  return best;
+}
+
+function assertPlateQuotas(board, players, seed) {
+  const groups = board.foundations.map(() => ({ trees: 0, water: 0, height: 0, crystals: 0 }));
+  for (const cell of Object.values(board.hexes)) {
+    const group = groups[nearestPlate(cell, board.foundations)];
+    if (cell.terrain === "tree") group.trees += 1;
+    if (cell.terrain === "water") group.water += 1;
+    if ((cell.elevation || 0) > 0) group.height += 1;
+  }
+  for (const cap of board.captures) {
+    const cell = board.hexes[key(cap.q, cap.r)];
+    groups[nearestPlate(cell, board.foundations)].crystals += 1;
+  }
+  groups.forEach((group, i) => {
+    const where = `${players} players seed ${seed} foundation ${i}`;
+    assert.ok(group.trees >= 4, `${where} has ${group.trees} trees`);
+    assert.ok(group.water >= 4, `${where} has ${group.water} water`);
+    assert.ok(group.height >= 4, `${where} has ${group.height} height`);
+    assert.equal(group.crystals, 2, `${where} crystals`);
+  });
 }
