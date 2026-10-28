@@ -16,6 +16,7 @@ import {
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import {
   topCapGeometry,
+  withoutTileFloors,
   LIQUID_TOP,
   HEIGHT_TOP,
   FOUNDATION_TOP,
@@ -328,6 +329,35 @@ describe("board models", () => {
       }
     }
     assert.ok(far);
+  });
+
+  it("lifts the hex pad off a tile so the crystal is not under a hex", () => {
+    const src = meshGeometry("foundation.obj");
+    const cut = withoutTileFloors(src, { q: 0, r: 0 }, new Set(["0,-2"]));
+    assert.notEqual(cut, src);
+    const near = (geo, x, z, yMin, yMax) => {
+      const pos = geo.attributes.position;
+      const index = geo.index;
+      const count = index ? index.count : pos.count;
+      const at = (slot, axis) => {
+        const vi = index ? index.getX(slot) : slot;
+        return axis === 0 ? pos.getX(vi) : axis === 1 ? pos.getY(vi) : pos.getZ(vi);
+      };
+      let n = 0;
+      for (let i = 0; i < count; i += 3) {
+        const cx = (at(i, 0) + at(i + 1, 0) + at(i + 2, 0)) / 3;
+        const cy = (at(i, 1) + at(i + 1, 1) + at(i + 2, 1)) / 3;
+        const cz = (at(i, 2) + at(i + 1, 2) + at(i + 2, 2)) / 3;
+        if (cy < yMin || cy > yMax) continue;
+        if (Math.hypot(cx - x, cz - z) < 10) n += 1;
+      }
+      return n;
+    };
+    assert.ok(near(src, 0, -77.84, 2.9, 3.7) > 0, "the socket has a hex pad");
+    assert.equal(near(cut, 0, -77.84, 2.9, 3.7), 0);
+    assert.ok(near(cut, 0, -77.84, 4.2, 4.6) > 0, "the rim around the socket stays");
+    assert.ok(near(cut, 0, 0, 2.9, 3.7) > 0, "other hex pads stay");
+    assert.equal(withoutTileFloors(src, { q: 0, r: 0 }, new Set()), src);
   });
 
   it("repeats grass once per foundation hex", () => {

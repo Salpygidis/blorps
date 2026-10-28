@@ -29,7 +29,7 @@
           <p class="eyebrow">hex slime racing</p>
           <h1>Blorps</h1>
           <p class="lede">
-            Race to 10 points. Your slimes, fruit, and cards sit in a tray so you can count them. At 6 points you slow down.
+            Up to 5 racers share one foundation. 6–10 add a second. Each foundation has 2 crystals. Reach 10 points and touch every crystal to win. At 6 points you slow down.
           </p>
 
           <label class="field">
@@ -84,7 +84,7 @@
             <button id="btn-start" class="btn primary hidden" type="button">Start race</button>
             <button id="btn-leave" class="btn ghost" type="button">Leave</button>
           </div>
-          <p class="hint">Add bots or share the code. 2–4 players use one foundation, 5–8 use two, and 9–12 use four.</p>
+          <p class="hint">Add bots or share the code. 2–5 players use one foundation. 6–10 add a second. Two crystals on each.</p>
         </div>
       </section>
 
@@ -99,7 +99,10 @@
           <div class="turn-banner" id="turn-banner">
             <span id="turn-text">Get ready</span>
           </div>
-          <div class="chip">
+          <div class="chip sound-chip">
+            <label class="volume">
+              <input id="volume" type="range" min="0" max="100" value="100" aria-label="Volume" />
+            </label>
             <button id="btn-mute" class="icon-btn" type="button" aria-label="Mute">🔊</button>
             <button id="btn-help" class="icon-btn" type="button" aria-label="Help">?</button>
           </div>

@@ -25,7 +25,7 @@ describe("hex math", () => {
     const board = buildBoard(3, mulberry32(42));
     assert.equal(hexCount(board.hexes), 35);
     assert.equal(board.starts.length, 3);
-    assert.equal(board.captures.length, 3);
+    assert.equal(board.captures.length, 2);
     assert.equal(board.fruits.length, 9);
     for (const type of ["apple", "banana", "grapes"]) {
       assert.equal(board.fruits.filter((f) => f.type === type).length, 3);
@@ -91,7 +91,7 @@ describe("hex math", () => {
   });
 
   it("never places fruit or crystals on a tree", () => {
-    for (const players of [2, 3, 4, 5, 8, 9, 12]) {
+    for (const players of [2, 3, 4, 5, 6, 10]) {
       for (let seed = 1; seed <= 80; seed++) {
         const board = buildBoard(players, mulberry32(seed));
         const trees = new Set(
@@ -105,6 +105,9 @@ describe("hex math", () => {
           assert.equal(cell.terrain, "open", `${item.id} on ${cell.terrain}`);
           assert.equal(trees.has(key(item.q, item.r)), false);
         }
+        for (const item of board.captures) {
+          assert.equal(board.hexes[key(item.q, item.r)].elevation || 0, 0, `${item.id} on a hill`);
+        }
       }
     }
   });
@@ -117,7 +120,7 @@ describe("hex math", () => {
   });
 
   it("keeps a walkable neighbor at every start", () => {
-    for (const players of [4, 8, 12]) {
+    for (const players of [5, 6, 10]) {
       for (let seed = 1; seed <= 20; seed++) {
         const board = buildBoard(players, mulberry32(seed));
         assert.equal(board.starts.length, players);
@@ -132,10 +135,10 @@ describe("hex math", () => {
     }
   });
 
-  it("places one of each fruit and one crystal per player", () => {
-    for (const players of [2, 4, 5, 8, 9, 12]) {
+  it("places one of each fruit and two crystals per foundation", () => {
+    for (const players of [2, 4, 5, 6, 10]) {
       const board = buildBoard(players, mulberry32(3));
-      assert.equal(board.captures.length, players, `${players} crystals`);
+      assert.equal(board.captures.length, foundationCount(players) * 2, `${players} crystals`);
       assert.equal(board.fruits.length, players * 3, `${players} fruit`);
       for (const type of ["apple", "banana", "grapes"]) {
         assert.equal(
@@ -147,26 +150,29 @@ describe("hex math", () => {
     }
   });
 
-  it("joins extra foundations when the table grows", () => {
-    assert.equal(foundationCount(4), 1);
-    assert.equal(foundationCount(5), 2);
-    assert.equal(foundationCount(8), 2);
-    assert.equal(foundationCount(9), 4);
-    assert.equal(foundationCount(12), 4);
+  it("joins a second foundation from six racers up", () => {
+    assert.equal(foundationCount(5), 1);
+    assert.equal(foundationCount(6), 2);
+    assert.equal(foundationCount(10), 2);
+
+    const one = buildBoard(5, mulberry32(7));
+    assert.equal(one.foundations.length, 1);
+    assert.equal(one.captures.length, 2);
+    assert.equal(new Set(one.starts.map((s) => key(s.q, s.r))).size, 5);
+    assert.equal(hexCount(one.hexes), 35);
 
     const two = buildBoard(6, mulberry32(7));
     assert.equal(two.foundations.length, 2);
     assert.deepEqual(two.foundations, plateOrigins(2));
+    assert.equal(two.captures.length, 4);
     assert.equal(hexCount(two.hexes), 35 * 2);
     assert.equal(linkedPlates(two), true);
 
-    const four = buildBoard(12, mulberry32(9));
-    assert.equal(four.foundations.length, 4);
-    assert.deepEqual(four.foundations, plateOrigins(4));
-    assert.equal(hexCount(four.hexes), 35 * 4);
-    assert.equal(linkedPlates(four), true);
-    const ids = new Set(four.starts.map((s) => key(s.q, s.r)));
-    assert.equal(ids.size, 12);
+    const ten = buildBoard(10, mulberry32(9));
+    assert.equal(ten.foundations.length, 2);
+    assert.equal(ten.captures.length, 4);
+    assert.equal(linkedPlates(ten), true);
+    assert.equal(new Set(ten.starts.map((s) => key(s.q, s.r))).size, 10);
   });
 });
 

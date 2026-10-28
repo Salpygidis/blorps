@@ -10,7 +10,7 @@ import {
   useBoardModels,
   layoutBoard,
 } from "./meshes.js";
-import { loadBoardModels } from "./boardModels.js";
+import { loadBoardModels, withoutTileFloors } from "./boardModels.js";
 import { tween, lerp, easeInOut } from "./tweens.js";
 import { hopLookPoint } from "./cameraFollow.js";
 import { describeResults } from "./results.js";
@@ -145,7 +145,7 @@ export class GameScene {
       { q: 1, r: -1, terrain: "open", elevation: 0 },
     ];
     if (this.models) layoutBoard(demo);
-    this.addFoundations();
+    this.addFoundations(undefined, demo);
     for (const h of demo) this.addHex(h);
     const a = makeBlorp("#7adf4a");
     const b = makeBlorp("#ff6b9d");
@@ -171,6 +171,9 @@ export class GameScene {
     const keep = new Set([this.ground, this.sun, this.moveBadge].filter(Boolean));
     for (const child of [...this.scene.children]) {
       if (keep.has(child) || child.isLight) continue;
+      child.traverse((obj) => {
+        if (obj.userData?.ownedGeo) obj.userData.ownedGeo.dispose();
+      });
       this.scene.remove(child);
     }
     this.hexes.clear();
@@ -181,15 +184,21 @@ export class GameScene {
     this.highlights = [];
   }
 
-  addFoundations(origins) {
+  addFoundations(origins, hexes) {
     const layout = this.models?.layout;
     if (!layout) return;
     const plates = origins?.length ? origins : [{ q: 0, r: 0 }];
+    const tiled = new Set();
+    for (const h of hexes || []) {
+      if (h.terrain === "water" || h.pool || (h.elevation || 0) > 0) tiled.add(key(h.q, h.r));
+    }
     for (const origin of plates) {
       const { x, z } = hexToWorld(origin.q || 0, origin.r || 0);
       // Pose measured in boardFit: +30° yaw turns the plate's flat-top hexes
       // into the game's pointy-top grid. Each extra plate sits on its own center.
-      const base = new THREE.Mesh(this.models.foundation, this.models.foundationMat);
+      const plateGeo = withoutTileFloors(this.models.foundation, origin, tiled);
+      const base = new THREE.Mesh(plateGeo, this.models.foundationMat);
+      if (plateGeo !== this.models.foundation) base.userData.ownedGeo = plateGeo;
       base.rotation.y = layout.yaw;
       base.scale.setScalar(layout.scale);
       base.position.set(layout.x + x, 0, layout.z + z);
@@ -198,7 +207,9 @@ export class GameScene {
       base.renderOrder = 1;
       base.userData.kind = "foundation";
       if (this.models.foundationTop && this.models.grassTopMat) {
-        const grass = new THREE.Mesh(this.models.foundationTop, this.models.grassTopMat);
+        const grassGeo = withoutTileFloors(this.models.foundationTop, origin, tiled);
+        const grass = new THREE.Mesh(grassGeo, this.models.grassTopMat);
+        if (grassGeo !== this.models.foundationTop) grass.userData.ownedGeo = grassGeo;
         grass.renderOrder = 2;
         grass.castShadow = false;
         grass.receiveShadow = false;
@@ -321,7 +332,6 @@ export class GameScene {
     this.epoch++;
     this.clearBoard();
     this.mode = "play";
-    this.addFoundations(state.foundations);
     const fit = this.fitBoard(state.hexes);
     const pools = new Set((state.captures || []).map((c) => key(c.q, c.r)));
     for (const h of state.hexes) {
@@ -333,8 +343,9 @@ export class GameScene {
       ) {
         h.pool = true;
       }
-      this.addHex(h);
     }
+    this.addFoundations(state.foundations, state.hexes);
+    for (const h of state.hexes) this.addHex(h);
     this.syncEntities(state, true);
     this.spherical = { theta: 0.55, phi: 0.9, r: fit };
     this.follow(state, true);

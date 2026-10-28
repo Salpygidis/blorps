@@ -569,17 +569,42 @@ describe("core rules", () => {
     assert.ok(g.captures[0].claimedBy.includes("b"));
   });
 
-  it("wins at 10 slime points", () => {
+  it("wins at 10 points after touching every crystal", () => {
     const g = twoPlayers({
-      fruits: [{ id: "gr", q: 1, r: 0, type: "grapes", value: 2 }],
+      captures: [
+        { id: "c1", q: 2, r: 0, claimedBy: ["a"] },
+        { id: "c2", q: 3, r: 0, claimedBy: [] },
+      ],
     });
-    g.playerById("a").slime = WIN_SLIME - 1;
-    g.clickHex("a", 1, 0);
+    const pip = g.playerById("a");
+    pip.slime = WIN_SLIME;
+    pip.claimedCaptures = ["c1"];
+    g.checkScore(pip);
+    assert.equal(g.status, "playing");
+    g.captures[1].claimedBy.push("a");
+    g.checkScore(pip);
     assert.equal(g.status, "finished");
     assert.equal(g.winnerId, "a");
-    assert.equal(g.playerById("a").slime, WIN_SLIME - 1);
-    assert.equal(g.playerById("a").basket[0].type, "grapes");
-    assert.equal(tally(g.playerById("a")).points, WIN_SLIME);
+  });
+
+  it("gives five racers one foundation and six racers two", () => {
+    const five = Game.fromLobby(
+      Array.from({ length: 5 }, (_, i) => ({ id: `p${i}`, name: `P${i}` })),
+      "FIVE"
+    );
+    assert.equal(five.foundations.length, 1);
+    assert.equal(five.captures.length, 2);
+    assert.equal(
+      five.log.some((line) => line.text === "The race is on! First to 10 points wins, once you have touched every crystal."),
+      true
+    );
+
+    const six = Game.fromLobby(
+      Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, name: `P${i}` })),
+      "SIX"
+    );
+    assert.equal(six.foundations.length, 2);
+    assert.equal(six.captures.length, 4);
   });
 
   it("rejects spectator actions and off-turn clicks", () => {

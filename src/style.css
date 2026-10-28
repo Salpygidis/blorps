@@ -361,6 +361,22 @@ input {
   cursor: pointer;
 }
 
+.sound-chip {
+  flex-wrap: nowrap;
+}
+.volume {
+  display: flex;
+  align-items: center;
+  width: 72px;
+}
+.volume input[type="range"] {
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  accent-color: #ff6b9d;
+  cursor: pointer;
+}
+
 .scoreboard {
   position: absolute;
   top: calc(68px + var(--safe-t));
@@ -793,7 +809,7 @@ input {
     width: auto;
     left: 12px;
     right: 12px;
-    top: calc(62px + var(--safe-t));
+    top: calc(136px + var(--safe-t));
     max-height: 28vh;
   }
   .player-card {
@@ -864,9 +880,16 @@ input {
     font-size: 22px;
     width: 26px;
   }
+  .hud-top {
+    flex-wrap: wrap;
+  }
+  .volume {
+    width: 52px;
+  }
   .turn-banner {
+    order: 3;
+    flex: 1 0 100%;
     min-width: 0;
-    flex: 1;
     font-size: 14px;
   }
   .inventory {
