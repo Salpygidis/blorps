@@ -1,5 +1,6 @@
 import { NAMES } from "../shared/constants.js";
 import { tally } from "../shared/score.js";
+import { UPGRADES } from "../shared/upgrades.js";
 import { sfx } from "./audio.js";
 import { freeBounceWhy } from "./results.js";
 
@@ -32,9 +33,11 @@ export const els = {
   hudCode: $("hud-code"),
   deckCount: $("deck-count"),
   announce: $("announce"),
+  turnCall: $("turn-call"),
   turnBanner: $("turn-banner"),
   turnText: $("turn-text"),
   scoreboard: $("scoreboard"),
+  powerupTip: $("powerup-tip"),
   inventory: $("inventory"),
   feedDock: $("feed-dock"),
   feedToggle: $("feed-toggle"),
@@ -185,6 +188,7 @@ export function renderHud(state, me) {
     .filter((p) => !p.isSpectator)
     .map((p) => playerCard(p, state))
     .join("");
+  refreshPowerupTip();
   renderInventory(state, me);
   prepareFeed(state);
   renderActions(state, me);
@@ -227,14 +231,15 @@ let openPowerupId = "";
 function powerupItems(upgrades) {
   const items = [];
   for (const upgrade of upgrades || []) {
+    const known = UPGRADES[upgrade.id] || {};
     const found = items.find((item) => item.id === upgrade.id);
     if (found) found.count += 1;
     else {
       items.push({
         id: upgrade.id,
-        name: upgrade.name,
-        emoji: upgrade.emoji,
-        desc: upgrade.desc,
+        name: upgrade.name || known.name || "Power-up",
+        emoji: upgrade.emoji || known.emoji || "✨",
+        desc: upgrade.desc || known.desc || "",
         count: 1,
       });
     }
@@ -331,6 +336,31 @@ function renderInventory(state, me) {
 }
 
 if (els.scoreboard) {
+  els.scoreboard.addEventListener("pointerover", (e) => {
+    const card = e.target.closest(".player-card");
+    if (card) showPowerupTip(card);
+  });
+  els.scoreboard.addEventListener("pointerout", (e) => {
+    const card = e.target.closest(".player-card");
+    if (!card) return;
+    const next = e.relatedTarget;
+    if (next && (card.contains(next) || els.powerupTip?.contains(next))) return;
+    if (openPowerupId) {
+      const pinned = els.scoreboard.querySelector(".player-card.open");
+      if (pinned) showPowerupTip(pinned);
+      else hidePowerupTip();
+      return;
+    }
+    hidePowerupTip();
+  });
+  els.powerupTip?.addEventListener("pointerleave", () => {
+    if (openPowerupId) {
+      const pinned = els.scoreboard.querySelector(".player-card.open");
+      if (pinned) showPowerupTip(pinned);
+      return;
+    }
+    hidePowerupTip();
+  });
   els.scoreboard.addEventListener("click", (e) => {
     const card = e.target.closest(".player-card");
     if (!card) return;
@@ -339,7 +369,49 @@ if (els.scoreboard) {
     for (const el of els.scoreboard.querySelectorAll(".player-card")) {
       el.classList.toggle("open", el.dataset.id === openPowerupId);
     }
+    if (openPowerupId) showPowerupTip(card);
+    else hidePowerupTip();
   });
+}
+
+function showPowerupTip(card) {
+  const source = card.querySelector(".powerups");
+  const tip = els.powerupTip;
+  if (!source || !tip) return;
+  tip.innerHTML = source.innerHTML;
+  tip.dataset.for = card.dataset.id || "";
+  tip.classList.add("show");
+  const cardRect = card.getBoundingClientRect();
+  tip.style.left = "0px";
+  tip.style.top = "0px";
+  const tipRect = tip.getBoundingClientRect();
+  const gap = 10;
+  let left = cardRect.left - tipRect.width - gap;
+  let top = cardRect.top;
+  if (left < 8) {
+    left = Math.max(8, Math.min(cardRect.left, window.innerWidth - tipRect.width - 8));
+    top = cardRect.bottom + gap;
+  }
+  if (top + tipRect.height > window.innerHeight - 8) {
+    top = Math.max(8, window.innerHeight - tipRect.height - 8);
+  }
+  tip.style.left = `${Math.round(left)}px`;
+  tip.style.top = `${Math.round(top)}px`;
+}
+
+function hidePowerupTip() {
+  els.powerupTip?.classList.remove("show");
+}
+
+function refreshPowerupTip() {
+  const tip = els.powerupTip;
+  if (!tip?.classList.contains("show") && !openPowerupId) return;
+  const id = openPowerupId || tip?.dataset.for;
+  const card = id
+    ? els.scoreboard.querySelector(`.player-card[data-id="${CSS.escape(id)}"]`)
+    : null;
+  if (card) showPowerupTip(card);
+  else hidePowerupTip();
 }
 
 function renderActions(state, me) {
@@ -412,6 +484,16 @@ export function showCard(card, deckRemaining) {
     <button class="btn primary" id="close-modal" data-ack="1" type="button">Nice!</button>
   `;
   els.modal.classList.remove("hidden");
+}
+
+export function showYourTurn() {
+  if (!els.turnCall) return;
+  els.turnCall.classList.remove("show");
+  void els.turnCall.offsetWidth;
+  els.turnCall.classList.add("show");
+  sfx("turn");
+  clearTimeout(showYourTurn._t);
+  showYourTurn._t = setTimeout(() => els.turnCall.classList.remove("show"), 1700);
 }
 
 export function announceFreeBounce() {

@@ -66,20 +66,30 @@ export function plateOrigins(count) {
 }
 
 /**
- * The foundation plate only covers about a third of these cells, so a slime
- * would stand on a hex the mesh cuts in half. They are not spaces.
+ * Tips the plate cuts through. A slime would stand on a hex the mesh only
+ * partly covers, so they are not spaces.
  * Measured on public/models/foundation.obj after foundationPose().
  */
 const CLIPPED_EDGES = [
   { q: 0, r: -3 },
   { q: 0, r: 3 },
-  { q: 4, r: -2 },
-  { q: -4, r: 2 },
+];
+
+/**
+ * Full pads past the radius-3 ring. The plate covers these the same way it
+ * covers the cells inside the ring.
+ */
+const FULL_EDGES = [
+  { q: 3, r: -4 },
+  { q: -3, r: -1 },
+  { q: 3, r: 1 },
+  { q: -3, r: 4 },
 ];
 
 function islandCells() {
   const clipped = new Set(CLIPPED_EDGES.map((h) => key(h.q, h.r)));
-  return ring(3).filter((h) => !clipped.has(key(h.q, h.r)));
+  const cells = ring(3).filter((h) => !clipped.has(key(h.q, h.r)));
+  return cells.concat(FULL_EDGES);
 }
 
 export function buildBoard(playerCount, rand) {
@@ -103,58 +113,36 @@ export function buildBoard(playerCount, rand) {
       ? startSpots(playerCount).map((s) => ({ q: s.q, r: s.r }))
       : spreadStarts(map, playerCount, rand);
   const startKeys = new Set(starts.map((s) => key(s.q, s.r)));
-  const plates = origins.length;
 
-  const allKeys = Object.keys(map);
-  const pickFree = (n, pred) => {
-    const pool = allKeys.filter((k) => pred(map[k], k));
-    return pickN(pool, n, rand);
-  };
-
-  for (const k of pickFree(
-    5 * plates,
-    (c, k) => c.terrain === "open" && !startKeys.has(k) && !seam.has(k)
-  )) {
-    map[k].terrain = "tree";
+  for (let plate = 0; plate < origins.length; plate++) {
+    fillPlate(map, plate, rand, startKeys, seam);
   }
-
-  for (const k of pickFree(
-    5 * plates,
-    (c, k) => c.terrain === "open" && !startKeys.has(k)
-  )) {
-    map[k].terrain = "water";
-    map[k].elevation = -1;
-  }
-
-  for (const k of pickFree(
-    3 * plates,
-    (c, k) => c.terrain === "open" && !startKeys.has(k)
-  )) {
-    map[k].elevation = 1;
-  }
-
   restoreConnectivity(map, starts);
-  for (const s of starts) {
-    const cell = map[key(s.q, s.r)];
-    if (cell) {
-      cell.terrain = "open";
-      cell.elevation = 0;
-    }
-    for (const n of [
-      [1, 0],
-      [1, -1],
-      [0, -1],
-      [-1, 0],
-      [-1, 1],
-      [0, 1],
-    ]) {
-      const nk = key(s.q + n[0], s.r + n[1]);
-      if (map[nk] && map[nk].terrain === "tree") map[nk].terrain = "open";
-    }
+  clearStartExits(map, starts);
+  for (let plate = 0; plate < origins.length; plate++) {
+    fillPlate(map, plate, rand, startKeys, seam, starts);
   }
 
   // Fruit and crystals only sit on open ground. A tree hex never holds one.
+  // Crystals are reserved first: two on each foundation, on flat ground.
   const blocked = new Set();
+  const captures = [];
+  for (let plate = 0; plate < origins.length; plate++) {
+    const onPlate = (c) =>
+      c.plate === plate &&
+      (c.elevation || 0) === 0 &&
+      !origins.some((origin) => origin.q === c.q && origin.r === c.r);
+    const capKeys = takeClearings(map, startKeys, blocked, 2, rand, onPlate);
+    for (const k of capKeys) {
+      captures.push({
+        id: `c${captures.length}`,
+        q: map[k].q,
+        r: map[k].r,
+        claimedBy: [],
+      });
+    }
+  }
+
   const fruitTypes = [];
   for (let i = 0; i < playerCount; i++) {
     fruitTypes.push("apple", "banana", "grapes");
@@ -170,22 +158,13 @@ export function buildBoard(playerCount, rand) {
       value: FRUIT[type].value,
     };
   });
-
-  const capKeys = takeClearings(
-    map,
-    startKeys,
-    blocked,
-    origins.length * 2,
-    rand,
-    (c) => (c.elevation || 0) === 0 && !origins.some((origin) => origin.q === c.q && origin.r === c.r)
-  );
-  const captures = capKeys.map((k, i) => ({
-    id: `c${i}`,
-    q: map[k].q,
-    r: map[k].r,
-    claimedBy: [],
-  }));
-  shiftOntoClearings([...fruits, ...captures], map, startKeys, blocked, rand);
+  shiftOntoClearings(fruits, map, startKeys, blocked, rand);
+  for (let plate = 0; plate < origins.length; plate++) {
+    const mine = captures.filter((c) => map[key(c.q, c.r)]?.plate === plate);
+    shiftOntoClearings(mine, map, startKeys, blocked, rand, (c) =>
+      c.plate === plate && (c.elevation || 0) === 0
+    );
+  }
 
   for (const cell of Object.values(map)) delete cell.plate;
 
@@ -259,16 +238,117 @@ function takeClearings(map, startKeys, blocked, n, rand, extra) {
   return chosen;
 }
 
-function shiftOntoClearings(items, map, startKeys, blocked, rand) {
+function shiftOntoClearings(items, map, startKeys, blocked, rand, extra) {
   for (const item of items) {
     const here = key(item.q, item.r);
     const cell = map[here];
-    if (cell && cell.terrain === "open" && !startKeys.has(here)) continue;
+    const ok =
+      cell && cell.terrain === "open" && !startKeys.has(here) && (!extra || extra(cell, here));
+    if (ok) continue;
     blocked.delete(here);
-    const next = takeClearings(map, startKeys, blocked, 1, rand)[0];
+    const next = takeClearings(map, startKeys, blocked, 1, rand, extra)[0];
     if (!next) continue;
     item.q = map[next].q;
     item.r = map[next].r;
+  }
+}
+
+/** Each foundation keeps two crystals, and at least four trees, hills, and pools. */
+const MIN_TERRAIN = 4;
+
+function countWhere(map, plate, pred) {
+  let n = 0;
+  for (const cell of Object.values(map)) {
+    if (cell.plate === plate && pred(cell)) n += 1;
+  }
+  return n;
+}
+
+function openFlatKeys(map, plate, startKeys, extra) {
+  const keys = [];
+  for (const [k, cell] of Object.entries(map)) {
+    if (cell.plate !== plate || cell.terrain !== "open" || (cell.elevation || 0) !== 0) continue;
+    if (startKeys.has(k)) continue;
+    if (extra && !extra(cell, k)) continue;
+    keys.push(k);
+  }
+  return keys;
+}
+
+function touchesStart(cell, startKeys) {
+  return neighbors(cell).some((n) => startKeys.has(key(n.q, n.r)));
+}
+
+function canTree(map, k, starts) {
+  const cell = map[k];
+  const prev = cell.terrain;
+  cell.terrain = "tree";
+  const reach = from(map, starts[0], (h) => h && h.terrain !== "tree");
+  let ok = true;
+  for (const other of Object.values(map)) {
+    if (other.terrain === "tree") continue;
+    if (!reach.has(key(other.q, other.r))) {
+      ok = false;
+      break;
+    }
+  }
+  cell.terrain = prev;
+  return ok;
+}
+
+function fillPlate(map, plate, rand, startKeys, seam, starts) {
+  const needTrees = MIN_TERRAIN - countWhere(map, plate, (c) => c.terrain === "tree");
+  if (needTrees > 0) {
+    const away = openFlatKeys(
+      map,
+      plate,
+      startKeys,
+      (c, k) => !seam.has(k) && !touchesStart(c, startKeys) && (!starts || canTree(map, k, starts))
+    );
+    const offSeam = openFlatKeys(
+      map,
+      plate,
+      startKeys,
+      (c, k) => !seam.has(k) && (!starts || canTree(map, k, starts))
+    );
+    const any = openFlatKeys(map, plate, startKeys, (c, k) => !starts || canTree(map, k, starts));
+    const pool = away.length >= needTrees ? away : offSeam.length >= needTrees ? offSeam : any;
+    let placed = 0;
+    for (const k of pickN(pool, pool.length, rand)) {
+      if (placed >= needTrees) break;
+      if (starts && !canTree(map, k, starts)) continue;
+      map[k].terrain = "tree";
+      placed += 1;
+    }
+  }
+
+  const needWater = MIN_TERRAIN - countWhere(map, plate, (c) => c.terrain === "water");
+  if (needWater > 0) {
+    for (const k of pickN(openFlatKeys(map, plate, startKeys), needWater, rand)) {
+      map[k].terrain = "water";
+      map[k].elevation = -1;
+    }
+  }
+
+  const needHeight = MIN_TERRAIN - countWhere(map, plate, (c) => (c.elevation || 0) > 0);
+  if (needHeight > 0) {
+    for (const k of pickN(openFlatKeys(map, plate, startKeys), needHeight, rand)) {
+      map[k].elevation = 1;
+    }
+  }
+}
+
+function clearStartExits(map, starts) {
+  for (const s of starts) {
+    const cell = map[key(s.q, s.r)];
+    if (cell) {
+      cell.terrain = "open";
+      cell.elevation = 0;
+    }
+    for (const n of neighbors(s)) {
+      const nk = key(n.q, n.r);
+      if (map[nk] && map[nk].terrain === "tree") map[nk].terrain = "open";
+    }
   }
 }
 

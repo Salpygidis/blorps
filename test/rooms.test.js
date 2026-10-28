@@ -68,7 +68,7 @@ describe("multiplayer rooms", () => {
     const [, snap] = await started;
 
     assert.equal(snap.state.status, "playing");
-    assert.equal(snap.state.hexes.length, 35);
+    assert.equal(snap.state.hexes.length, 39);
     assert.ok(snap.state.players.some((p) => p.isSpectator));
     const hex = snap.state.legalHexes[0];
     assert.ok(hex);

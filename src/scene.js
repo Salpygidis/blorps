@@ -315,6 +315,7 @@ export class GameScene {
     } else {
       this.syncEntities(state);
       this.follow(state, true);
+      this.onTurnReady?.(state);
     }
   }
 
@@ -428,10 +429,8 @@ export class GameScene {
   syncHighlights(state) {
     for (const h of this.highlights) this.scene.remove(h);
     this.highlights = [];
-    const cur = (state.players || []).find((p) => p.id === state.turnPlayerId);
-    const color = cur?.color?.hex || "#fff3a8";
     for (const hex of state.legalHexes || []) {
-      const ring = makeHighlight(color);
+      const ring = makeHighlight();
       const { x, z } = hexToWorld(hex.q, hex.r);
       ring.position.set(x, this.topY(hex.q, hex.r) + 0.04, z);
       this.scene.add(ring);
@@ -485,6 +484,7 @@ export class GameScene {
       }
       this.syncHighlights(latest);
       this.animating = false;
+      this.onTurnReady?.(latest);
     }
   }
 
@@ -776,7 +776,8 @@ export class GameScene {
     }
     for (const [i, h] of this.highlights.entries()) {
       h.position.y += Math.sin(t * 4 + i) * 0.0008;
-      h.material.opacity = 0.55 + Math.sin(t * 5 + i) * 0.25;
+      const pulse = h.userData.pulse;
+      if (pulse) pulse.opacity = 0.34 + Math.sin(t * 5 + i) * 0.1;
     }
     this.placeMoveBadge();
     this.renderer.render(this.scene, this.camera);
