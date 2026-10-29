@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { makeBlorp, makeToken } from "../src/meshes.js";
+import { makeBlorp, makeFruit, makeToken } from "../src/meshes.js";
 
 describe("slime mesh", () => {
   it("has a black top hat and no white dot on the crown", () => {
@@ -28,6 +28,33 @@ describe("slime mesh", () => {
       if (c.r < 0.95 || c.g < 0.95 || c.b < 0.95) return;
       assert.ok(obj.position.y < 0.22);
     });
+  });
+
+  it("paints each token edge to match its icon", () => {
+    const edge = (token) => {
+      let hex = "";
+      token.traverse((obj) => {
+        if (obj.userData?.role === "rim") hex = obj.material.color.getHexString();
+      });
+      return hex;
+    };
+    const slime = makeToken("#e6b325");
+    const apple = makeFruit({ type: "apple" });
+    const banana = makeFruit({ type: "banana" });
+    const grapes = makeFruit({ type: "grapes" });
+    assert.equal(edge(slime), "3cbf45");
+    assert.equal(edge(apple), "ff3b3b");
+    assert.equal(edge(banana), "ffd93b");
+    assert.equal(edge(grapes), "9b59d0");
+    const band = (token) => {
+      let hex = "";
+      token.traverse((obj) => {
+        if (obj.userData?.role === "band") hex = obj.material.color.getHexString();
+      });
+      return hex;
+    };
+    assert.equal(band(apple), "ff3b3b");
+    assert.notEqual(band(apple), band(banana));
   });
 
   it("lays a slime drop flat on the hex", () => {

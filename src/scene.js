@@ -7,6 +7,7 @@ import {
   makeToken,
   makeHighlight,
   tileDepth,
+  TREE_TOP,
   useBoardModels,
   layoutBoard,
 } from "./meshes.js";
@@ -182,6 +183,13 @@ export class GameScene {
     this.tokens.clear();
     this.captures.clear();
     this.highlights = [];
+    if (this.nameLabels) {
+      for (const sprite of this.nameLabels.values()) {
+        sprite.material.map?.dispose();
+        sprite.material.dispose();
+      }
+      this.nameLabels.clear();
+    }
   }
 
   addFoundations(origins, hexes) {
@@ -263,12 +271,13 @@ export class GameScene {
 
   topY(q, r) {
     const rec = this.hexRecord(q, r);
-    return rec ? tileDepth(rec.hex) : 0.26;
+    if (!rec) return 0.26;
+    return tileDepth(rec.hex) + (rec.hex?.terrain === "tree" ? TREE_TOP : 0);
   }
 
   placeOnHex(obj, q, r, hex, extra = 0) {
     const { x, z } = hexToWorld(q, r);
-    const depth = hex ? tileDepth(hex) : this.topY(q, r);
+    const depth = hex ? tileDepth(hex) + (hex.terrain === "tree" ? TREE_TOP : 0) : this.topY(q, r);
     obj.position.set(x, depth + extra, z);
   }
 
@@ -779,6 +788,7 @@ export class GameScene {
       const pulse = h.userData.pulse;
       if (pulse) pulse.opacity = 0.34 + Math.sin(t * 5 + i) * 0.1;
     }
+    this.placeNameLabels();
     this.placeMoveBadge();
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(this.loop);
@@ -860,8 +870,92 @@ GameScene.prototype.placeMoveBadge = function placeMoveBadge() {
   this.moveBadge.visible = true;
   const scaleY = mesh.scale.y || mesh.scale.x || 1;
   const hatTop = mesh.userData.hatTop ?? 0.34;
-  this.moveBadge.position.set(mesh.position.x, mesh.position.y + hatTop * scaleY + 0.38, mesh.position.z);
+  this.moveBadge.position.set(mesh.position.x, mesh.position.y + hatTop * scaleY + 0.62, mesh.position.z);
 };
+
+GameScene.prototype.placeNameLabels = function placeNameLabels() {
+  if (!this.nameLabels) this.nameLabels = new Map();
+  const show = this.mode === "play";
+  const seen = new Set();
+  if (show) {
+    for (const player of this.state?.players || []) {
+      if (player.isSpectator) continue;
+      const mesh = this.blorps.get(player.id);
+      if (!mesh) continue;
+      seen.add(player.id);
+      let sprite = this.nameLabels.get(player.id);
+      if (!sprite || sprite.userData.text !== player.name) {
+        if (sprite) {
+          this.scene.remove(sprite);
+          sprite.material.map?.dispose();
+          sprite.material.dispose();
+        }
+        sprite = makeNameLabel(player.name);
+        this.nameLabels.set(player.id, sprite);
+        this.scene.add(sprite);
+      }
+      const scaleY = mesh.scale.y || mesh.scale.x || 1;
+      const hatTop = mesh.userData.hatTop ?? 0.7;
+      sprite.position.set(mesh.position.x, mesh.position.y + hatTop * scaleY + 0.2, mesh.position.z);
+      sprite.visible = true;
+    }
+  }
+  for (const [id, sprite] of this.nameLabels) {
+    if (seen.has(id)) continue;
+    sprite.visible = false;
+  }
+};
+
+function makeNameLabel(name) {
+  const text = String(name || "Blorp").slice(0, 18);
+  const mat = new THREE.SpriteMaterial({ transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.raycast = () => {};
+  sprite.renderOrder = 8;
+  sprite.userData.text = text;
+  paintNameLabel(sprite, text);
+  if (typeof document !== "undefined" && document.fonts?.load) {
+    document.fonts.load("500 64px Fredoka").then(() => {
+      if (sprite.userData.text === text) paintNameLabel(sprite, text);
+    }).catch(() => {});
+  }
+  return sprite;
+}
+
+function paintNameLabel(sprite, text) {
+  const c = document.createElement("canvas");
+  const font = "500 64px Fredoka, Trebuchet MS, sans-serif";
+  const probe = c.getContext("2d");
+  probe.font = font;
+  const textW = Math.ceil(probe.measureText(text).width);
+  c.width = Math.max(96, textW + 56);
+  c.height = 88;
+  const g = c.getContext("2d");
+  g.font = font;
+  g.fillStyle = "rgba(20, 24, 34, 0.88)";
+  g.strokeStyle = "#ffffff";
+  g.lineWidth = 8;
+  const r = 32;
+  g.beginPath();
+  g.moveTo(12 + r, 8);
+  g.arcTo(c.width - 8, 8, c.width - 8, c.height - 8, r);
+  g.arcTo(c.width - 8, c.height - 8, 8, c.height - 8, r);
+  g.arcTo(8, c.height - 8, 8, 8, r);
+  g.arcTo(8, 8, c.width - 8, 8, r);
+  g.closePath();
+  g.fill();
+  g.stroke();
+  g.fillStyle = "#fffdf8";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(text, c.width / 2, c.height / 2 + 2);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  if (sprite.material.map) sprite.material.map.dispose();
+  sprite.material.map = tex;
+  const h = 0.24;
+  sprite.scale.set(h * (c.width / c.height), h, 1);
+}
 
 function paintMoveBadge(sprite, count) {
   const c = document.createElement("canvas");

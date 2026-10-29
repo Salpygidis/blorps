@@ -661,6 +661,21 @@ describe("core rules", () => {
     assert.equal(g.clickHex("b", 7, 0).ok, false);
   });
 
+  it("springs back off a tree on the free bounce", () => {
+    const g = twoPlayers();
+    g.playerById("a").q = 2;
+    g.playerById("a").r = -1;
+    g.playerById("a").upgrades.push({ id: "treehopper" });
+    g.beginTurn(0);
+    g.clickHex("a", 3, -1);
+    assert.equal(g.phase, "bounce");
+    assert.equal(g.events.find((e) => e.type === "freeBounce").reason, "tree");
+    assert.equal(g.legalHexes().some((h) => h.q === 2 && h.r === -1), true);
+    assert.equal(g.clickHex("a", 2, -1).ok, true);
+    assert.equal(g.playerById("a").q, 2);
+    assert.equal(g.playerById("a").r, -1);
+  });
+
   it("lets Treehopper move onto one tree per turn and bounce off it", () => {
     const deck = twoPlayers();
     const cards = [...deck.upgradeDeck, ...deck.upgradeDiscard];
