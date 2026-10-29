@@ -907,8 +907,8 @@ export class Game {
         const hex = this.hexAt(h.q, h.r);
         if (!hex) break;
         if (hex.terrain === "tree") break;
-        // The hex you just left is not a landing. A longer hop may still fly over it.
-        if (this.isFreshDrop(h)) continue;
+        // The hex you just left is not a normal landing. A tree bounce may spring back onto it.
+        if (this.isFreshDrop(h) && this.phaseData?.reason !== "tree") continue;
         out.push({ q: h.q, r: h.r });
       }
     }

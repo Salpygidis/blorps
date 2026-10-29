@@ -1,8 +1,12 @@
 import * as THREE from "three";
 import { HEX_SIZE } from "../shared/hex.js";
 import { capScaleFor, foundationPose } from "../shared/boardFit.js";
+import { FRUIT } from "../shared/constants.js";
 
 let kit = null;
+
+/** Canopy height above the hex pad. Racers stand on this when they hop a tree. */
+export const TREE_TOP = 1.15;
 
 export function useBoardModels(models) {
   kit = models;
@@ -185,9 +189,12 @@ function makeTree() {
   );
   leaf.position.y = 0.55;
   leaf.castShadow = true;
+  // The canopy is taller than a hex, so it must not steal clicks from the bounce hexes around it.
+  leaf.raycast = () => {};
   const leaf2 = leaf.clone();
   leaf2.position.y = 0.82;
   leaf2.scale.setScalar(0.72);
+  leaf2.raycast = () => {};
   g.add(trunk, leaf, leaf2);
   return g;
 }
@@ -264,9 +271,18 @@ const FRUIT_FACES = {
   grapes: "/textures/tokens/grapes.png",
 };
 
+/** Outer rim of each token, matching the picture in the middle. */
+const TOKEN_EDGE = {
+  apple: FRUIT.apple.color,
+  banana: FRUIT.banana.color,
+  grapes: FRUIT.grapes.color,
+  slime: "#3cbf45",
+};
+
 export function makeFruit(fruit) {
-  const token = makeBoardToken(FRUIT_FACES[fruit?.type]);
-  token.userData.fruitType = fruit?.type || "";
+  const type = fruit?.type || "";
+  const token = makeBoardToken(FRUIT_FACES[type], TOKEN_EDGE[type]);
+  token.userData.fruitType = type;
   return token;
 }
 
@@ -410,11 +426,13 @@ function buildBoardToken() {
     0.03,
     new THREE.MeshBasicMaterial({ color: "#5e3b1e" })
   );
+  rim.userData.role = "rim";
   const gold = octagonPrism(
     0.52,
     0.012,
     new THREE.MeshBasicMaterial({ color: "#e9b53a" })
   );
+  gold.userData.role = "band";
   gold.position.y = 0.026;
   const face = octagonPrism(
     0.435,
@@ -431,15 +449,25 @@ function buildBoardToken() {
 /**
  * Octagonal token. `faceUrl` is the picture drawn inside the stitch.
  */
-export function makeBoardToken(faceUrl) {
+function paintEdge(mesh, color) {
+  mesh.material = mesh.material.clone();
+  mesh.material.color.set(color);
+}
+
+export function makeBoardToken(faceUrl, edgeColor) {
   if (!boardTokenTemplate) boardTokenTemplate = buildBoardToken();
   const token = boardTokenTemplate.clone();
+  if (edgeColor) {
+    token.traverse((obj) => {
+      if (obj.userData?.role === "rim" || obj.userData?.role === "band") paintEdge(obj, edgeColor);
+    });
+  }
   addFacePicture(token, faceUrl);
   return token;
 }
 
 export function makeToken(color = "#e6b325") {
-  const token = makeBoardToken("/textures/tokens/slime.png");
+  const token = makeBoardToken("/textures/tokens/slime.png", TOKEN_EDGE.slime);
   token.userData.tint = color;
   return token;
 }
