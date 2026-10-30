@@ -18,10 +18,13 @@ export function describeHex(state, q, r, localId) {
   } else if (hex.terrain === "water") {
     lines.push({
       emoji: "🌊",
-      text: "Water. Stepping in costs 1 move. Under 6 points, leaving costs 2.",
+      text: "Water. Stepping in costs 1 move. Under 6 points, climbing out costs 2. Slip-n-Slide turns one landing here each turn into a free bounce, including a landing from a free bounce.",
     });
   } else if (hex.terrain === "tree") {
-    lines.push({ emoji: "🌳", text: "Tree. Nobody can stop on this hex." });
+    lines.push({
+      emoji: "🌳",
+      text: "Tree. Treehopper can land here once per turn, including during a free bounce, and bounce again. It blocks every other landing.",
+    });
   } else if ((hex.elevation || 0) > 0) {
     lines.push({
       emoji: "🟤",

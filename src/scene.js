@@ -440,6 +440,11 @@ export class GameScene {
     this.highlights = [];
     for (const hex of state.legalHexes || []) {
       const ring = makeHighlight();
+      const rec = this.hexRecord(hex.q, hex.r);
+      ring.userData.kind = "hex";
+      ring.userData.q = hex.q;
+      ring.userData.r = hex.r;
+      ring.userData.terrain = rec?.hex?.terrain || "open";
       const { x, z } = hexToWorld(hex.q, hex.r);
       ring.position.set(x, this.topY(hex.q, hex.r) + 0.04, z);
       this.scene.add(ring);
@@ -679,24 +684,9 @@ export class GameScene {
     this.pointer.x = ((cx - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((cy - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const stuff = [
-      ...[...this.hexes.values()].map((h) => h.mesh),
-      ...this.fruits.values(),
-      ...this.tokens.values(),
-      ...this.captures.values(),
-      ...this.blorps.values(),
-    ];
-    const hits = this.raycaster.intersectObjects(stuff, true);
-    if (!hits.length) return null;
-    const blorp = blorpOf(hits[0].object);
-    if (blorp && Number.isFinite(blorp.userData.q)) {
-      return { q: blorp.userData.q, r: blorp.userData.r };
-    }
-    const collectible = collectibleOf(hits[0].object);
-    if (collectible) return { q: collectible.userData.q, r: collectible.userData.r };
-    const tile = hexTileOf(hits[0].object);
-    if (!tile) return null;
-    return { q: tile.userData.q, r: tile.userData.r };
+    const hits = this.raycaster.intersectObjects(this.pickables(true), true);
+    const hex = this.hexFromHits(hits, { passThroughTrees: false });
+    return hex;
   }
 
   pick(cx, cy) {
@@ -705,26 +695,53 @@ export class GameScene {
     this.pointer.x = ((cx - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((cy - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const tiles = [...this.hexes.values()].map((h) => h.mesh);
+    const legal = new Set((this.state?.legalHexes || []).map((h) => key(h.q, h.r)));
+    const hex = this.hexFromHits(this.raycaster.intersectObjects(this.pickables(false), true), {
+      passThroughTrees: true,
+      legal,
+    });
+    if (!hex) return;
+    this.onHex(hex.q, hex.r);
+  }
+
+  pickables(includeBlorps) {
     const stuff = [
-      ...tiles,
+      ...[...this.hexes.values()].map((h) => h.mesh),
+      ...(this.highlights || []),
       ...this.fruits.values(),
       ...this.tokens.values(),
       ...this.captures.values(),
     ];
-    const hits = this.raycaster.intersectObjects(stuff, true);
-    if (!hits.length) return;
-    const collectible = collectibleOf(hits[0].object);
-    if (collectible) {
-      const { q, r } = collectible.userData;
-      if (this.hexRecord(q, r)?.hex?.terrain === "tree") return;
-      this.onHex(q, r);
-      return;
+    if (includeBlorps) stuff.push(...this.blorps.values());
+    return stuff;
+  }
+
+  /**
+   * The canopy sits above the board, so a ray through the leaves hits the tree
+   * before the hex behind it. Landing on a tree keeps that hit. Every other
+   * time the click falls through to the hex the pointer is actually over.
+   */
+  hexFromHits(hits, { passThroughTrees = false, legal = null } = {}) {
+    for (const hit of hits) {
+      const blorp = blorpOf(hit.object);
+      if (blorp && Number.isFinite(blorp.userData.q)) {
+        return { q: blorp.userData.q, r: blorp.userData.r };
+      }
+      const collectible = collectibleOf(hit.object);
+      if (collectible) {
+        const { q, r } = collectible.userData;
+        if (this.hexRecord(q, r)?.hex?.terrain === "tree") continue;
+        return { q, r };
+      }
+      const tile = hexTileOf(hit.object);
+      if (!tile || !Number.isFinite(tile.userData.q)) continue;
+      const q = tile.userData.q;
+      const r = tile.userData.r;
+      const terrain = tile.userData.terrain || this.hexRecord(q, r)?.hex?.terrain;
+      if (passThroughTrees && terrain === "tree" && !legal?.has(key(q, r))) continue;
+      return { q, r };
     }
-    const tile = hexTileOf(hits[0].object);
-    if (!tile) return;
-    const { q, r } = tile.userData;
-    this.onHex(q, r);
+    return null;
   }
 
   dirFromPad(index) {

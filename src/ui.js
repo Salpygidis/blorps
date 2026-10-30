@@ -444,6 +444,11 @@ function renderActions(state, me) {
     `;
     return;
   }
+  if ((kind === "bounce" && state.ui?.canBack) || kind === "bop") {
+    els.actionBar.classList.remove("hidden");
+    els.actionBar.innerHTML = `<button class="btn" data-act="back" type="button">Back</button>`;
+    return;
+  }
   if (kind === "move") {
     els.btnEnd.classList.toggle("hidden", !state.ui.canEnd);
   }
@@ -456,13 +461,13 @@ export function showHow() {
     <ul>
       <li>Each slime you hold is <strong>1 point</strong>. Everyone starts with 2. A random Blorp goes first. A turn that starts at <strong>6 points</strong> or more has 1 move. <strong>Zoomies</strong> lets that first step be a straight hop of 2 hexes. <strong>Long Reach</strong> adds 1 move while you have fewer than 6 points.</li>
       <li>Hold the pointer on a hex for a second to see everything there, including a slime standing on a crystal pool.</li>
-      <li>Stepping up onto a higher hex costs 2 moves, or 1 if you have <strong>6 points</strong> or more. <strong>Slip-n-Slide</strong> lets you move onto a water tile once per turn and treats that landing as a free bounce.</li>
+      <li>Stepping up onto a higher hex costs 2 moves, or 1 if you have <strong>6 points</strong> or more. <strong>Slip-n-Slide</strong> lets you land on water once per turn, including during a free bounce, and that landing is another free bounce.</li>
       <li>On your turn, tap a glowing hex. You may change direction between steps. A Zoomies hop flies straight over the hex in the middle.</li>
-      <li>Trees block the way. You cannot be pushed onto one. <strong>Treehopper</strong> lets you move onto a tree once per turn and treats that tree as a free bounce.</li>
-      <li>Your first move <strong>leaves 1 goo</strong> on the hex you started from. You cannot jump straight back onto that hex with your next hop. A later hop can, including a free bounce after you land on a slime.</li>
+      <li>Trees block the way. You cannot be pushed onto one, or bounce past one. <strong>Treehopper</strong> lets you land on a tree once per turn, including during a free bounce, and that landing is another free bounce.</li>
+      <li>Your first move <strong>leaves 1 goo</strong> on the hex you started from. The next ordinary hop has to go somewhere else. A free bounce off a tree or a water tile can spring back onto that goo. A slime bounce can fly over it and land farther along.</li>
       <li>Land on a slime token (yours or theirs): it goes in your tray for <strong>1 point</strong> and a <strong>free bounce</strong>.</li>
       <li>A free bounce leaves through <strong>one of the six sides</strong> and keeps going straight, up to 2 hexes. You cannot turn.</li>
-      <li>Land on a player: <strong>Bounce</strong> off them the same way, or <strong>Bop</strong> them up to 2 hexes in a straight line. Choose to steal 1 goo, or a random fruit from their tray. If that push lands on another Blorp, they get bumped 1 hex the same way. <strong>Bop Armor</strong> still lets them push you, but they cannot steal slime or fruit.</li>
+      <li>Land on a player: <strong>Bounce</strong> off them the same way, or <strong>Bop</strong> them up to 2 hexes in a straight line. <strong>Back</strong> returns to that choice before you pick a hex. Choose to steal 1 goo, or a random fruit from their tray. If that push lands on another Blorp, they get bumped 1 hex the same way. <strong>Bop Armor</strong> still lets them push you, but they cannot steal slime or fruit.</li>
       <li>If you are pushed onto a hex, you do not drop goo. You do pick up fruit, slime, or a new crystal there. A slime you pick up while being pushed does not give a free bounce.</li>
       <li>The board starts with one apple, one banana, and one bunch of grapes per player. Each fruit in your tray is <strong>1 point</strong>. Flying over fruit leaves it behind.</li>
       <li>Every power-up you hold is <strong>1 point</strong>. <strong>Apple Fan</strong>, <strong>Banana Bunch</strong>, and <strong>Grape Stomp</strong> also add +1 for each of that fruit in your tray.</li>
