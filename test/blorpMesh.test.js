@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { makeBlorp, makeFruit, makeToken } from "../src/meshes.js";
+import { makeBlorp, makeFruit, makeTile, makeToken } from "../src/meshes.js";
 
 describe("slime mesh", () => {
   it("has a black top hat and no white dot on the crown", () => {
@@ -55,6 +55,20 @@ describe("slime mesh", () => {
     };
     assert.equal(band(apple), "ff3b3b");
     assert.notEqual(band(apple), band(banana));
+  });
+
+  it("keeps a click column on the tree canopy", () => {
+    const tile = makeTile({ q: 1, r: 0, terrain: "tree", elevation: 0 });
+    let pick = null;
+    const leaves = [];
+    tile.traverse((obj) => {
+      if (obj.userData?.treePick) pick = obj;
+      if (obj.geometry?.type === "ConeGeometry") leaves.push(obj);
+    });
+    assert.ok(pick);
+    assert.equal(pick.raycast, THREE.Mesh.prototype.raycast);
+    assert.equal(leaves.length, 2);
+    for (const leaf of leaves) assert.notEqual(leaf.raycast, THREE.Mesh.prototype.raycast);
   });
 
   it("lays a slime drop flat on the hex", () => {

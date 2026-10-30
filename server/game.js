@@ -22,10 +22,10 @@ import { buildBoard } from "./map.js";
  * Zoomies: the first move may be a straight hop of 2 hexes. 6+ points still starts with 1 move.
  * Long Reach: +1 movement while you have fewer than 6 points.
  * Stepping onto a higher hex costs 2. At 6 points or more, climbing costs 1.
- * Slip-n-Slide: once per turn, moving onto water is a free bounce.
+ * Slip-n-Slide: once per turn, landing on water — on a move or during a free bounce — is another free bounce.
  * First move of the turn: leave 1 slime token on the hex you started from, and pay
  * that point before anything on the landing hex counts. You always keep at least 1 slime.
- * You cannot step straight back onto that hex with the next hop. A later hop, including a free bounce after your second move, can. A longer bounce may fly over it.
+ * You cannot step straight back onto that hex with the next ordinary hop. A free bounce off a tree or water can spring back onto it. A slime bounce can fly over it and land farther along.
  * Landing on another Blorp still offers Bounce or Bop. It does not hand them the slime.
  * Land on a slime token (anyone's): pick it up for +1 and one free bounce.
  * Free bounce: leave through one of the six sides and keep going, up to 2 hexes.
@@ -44,7 +44,7 @@ import { buildBoard } from "./map.js";
  * A pushed Blorp does not drop goo. They pick up fruit, slime, and a new crystal
  * on the landing hex. A slime picked up while pushed does not grant a free bounce.
  * Bop Armor: a bop still pushes you, but it cannot steal slime or fruit.
- * Treehopper: once per turn, move onto a tree and treat it as a free bounce.
+ * Treehopper: once per turn, land on a tree — on a move or during a free bounce — and treat it as another free bounce. You stop on the tree. The bounce does not fly past it.
  * A random player goes first. Every racer starts with the same goo.
  * Food and tokens never respawn.
  */
@@ -348,6 +348,7 @@ export class Game {
     this.events = [];
     const err = this.assertActor(playerId);
     if (err) return err;
+    if (action === "back") return this.backChoice(playerId);
     if (this.phase !== "contact") return fail("No bounce/bop choice now.");
     const player = this.current();
     const other = this.playerById(this.phaseData.otherId);
@@ -357,6 +358,8 @@ export class Game {
       this.startFreeBounce(player, "player", {
         otherId: other?.id,
         otherName: other?.name,
+        fromContact: true,
+        owedReason: owedBounce,
       });
     } else if (action === "bop" || action === "bop-fruit") {
       if (!other) return fail("They already wiggled away.");
@@ -382,6 +385,24 @@ export class Game {
     } else {
       return fail("Pick Bounce or Bop.");
     }
+    this.afterAction();
+    return ok();
+  }
+
+  /** Return to Bounce or Bop before a destination hex is chosen. */
+  backChoice(playerId) {
+    const data = this.phaseData || {};
+    const fromBounce = this.phase === "bounce" && data.fromContact;
+    const fromBop = this.phase === "bop";
+    if (!fromBounce && !fromBop) return fail("Nothing to take back.");
+    const owed = fromBop ? data.bounceReason : data.owedReason;
+    this.phase = "contact";
+    this.phaseData = {
+      otherId: data.otherId,
+      pendingBounce: !!owed,
+      bounceReason: owed || null,
+    };
+    this.note(`${this.current().name} goes back to the choice.`);
     this.afterAction();
     return ok();
   }
@@ -641,7 +662,8 @@ export class Game {
    * A slime token on the same hex already supplies the bounce, so the water charge stays.
    */
   landingBounce(player, q, r, kind, slimeBounce) {
-    if (kind !== "move") return slimeBounce ? "slime" : null;
+    // A pushed Blorp does not earn these. A normal step or a free bounce does.
+    if (kind !== "move" && kind !== "bounce") return null;
     const terrain = this.hexAt(q, r)?.terrain;
     if (terrain === "tree" && hasUpgrade(player, "treehopper") && !this.treeHopUsed) {
       this.treeHopUsed = true;
@@ -906,9 +928,15 @@ export class Game {
         if (!onFaceLine(p, h, range)) break;
         const hex = this.hexAt(h.q, h.r);
         if (!hex) break;
-        if (hex.terrain === "tree") break;
-        // The hex you just left is not a normal landing. A tree bounce may spring back onto it.
-        if (this.isFreshDrop(h) && this.phaseData?.reason !== "tree") continue;
+        if (hex.terrain === "tree") {
+          // Stop on the tree when Treehopper is still unused. Do not fly past it.
+          if (!(hasUpgrade(p, "treehopper") && !this.treeHopUsed)) break;
+          out.push({ q: h.q, r: h.r });
+          break;
+        }
+        // The hex you just left is not a normal landing. A tree or water bounce may spring back onto it.
+        const sprung = this.phaseData?.reason;
+        if (this.isFreshDrop(h) && sprung !== "tree" && sprung !== "water") continue;
         out.push({ q: h.q, r: h.r });
       }
     }
@@ -966,6 +994,7 @@ export class Game {
         range,
         steal: this.phaseData?.steal || "slime",
         armored: hasUpgrade(o, "gooarmor"),
+        canBack: true,
       };
     }
     if (this.phase === "bounce") {
@@ -974,6 +1003,7 @@ export class Game {
         range: p ? this.bounceRange(p) : BOUNCE_RANGE,
         reason: this.phaseData?.reason || "slime",
         otherName: this.phaseData?.otherName,
+        canBack: !!this.phaseData?.fromContact,
       };
     }
     if (this.phase === "upgrade") {

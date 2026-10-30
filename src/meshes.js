@@ -173,6 +173,12 @@ function makePrismTile(hex) {
   return mesh;
 }
 
+const TREE_PICK_MAT = new THREE.MeshBasicMaterial({
+  transparent: true,
+  opacity: 0,
+  depthWrite: false,
+});
+
 function makeTree() {
   const g = new THREE.Group();
   const trunkH = 0.34;
@@ -189,13 +195,20 @@ function makeTree() {
   );
   leaf.position.y = 0.55;
   leaf.castShadow = true;
-  // The canopy is taller than a hex, so it must not steal clicks from the bounce hexes around it.
+  // The cones overhang the click column and used to steal taps from the hexes around the tree.
   leaf.raycast = () => {};
   const leaf2 = leaf.clone();
   leaf2.position.y = 0.82;
   leaf2.scale.setScalar(0.72);
   leaf2.raycast = () => {};
-  g.add(trunk, leaf, leaf2);
+  // A slim column under the canopy. Taps on the leaves hit the tree, and stay inside this hex.
+  const pickH = 1.45;
+  const pick = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, pickH, 8), TREE_PICK_MAT);
+  pick.position.y = pickH / 2;
+  pick.castShadow = false;
+  pick.receiveShadow = false;
+  pick.userData.treePick = true;
+  g.add(trunk, leaf, leaf2, pick);
   return g;
 }
 
@@ -487,18 +500,22 @@ export function makeHighlight() {
     color: "#111111",
     side: THREE.DoubleSide,
     transparent: true,
-    opacity: 0.55,
+    opacity: 0.72,
     depthWrite: false,
+    depthTest: false,
   });
   const white = new THREE.MeshBasicMaterial({
     color: "#ffffff",
     side: THREE.DoubleSide,
     transparent: true,
-    opacity: 0.38,
+    opacity: 0.55,
     depthWrite: false,
+    depthTest: false,
   });
-  lay(HEX_SIZE * 0.46, HEX_SIZE * 0.94, black, 2, 0.02);
-  lay(HEX_SIZE * 0.56, HEX_SIZE * 0.84, white, 3, 0.04);
+  const edge = lay(HEX_SIZE * 0.46, HEX_SIZE * 0.94, black, 6, 0.02);
+  const glow = lay(HEX_SIZE * 0.56, HEX_SIZE * 0.84, white, 7, 0.04);
+  edge.frustumCulled = false;
+  glow.frustumCulled = false;
   group.userData.pulse = white;
   return group;
 }

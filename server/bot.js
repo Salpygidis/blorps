@@ -1,4 +1,5 @@
 import { distance } from "../shared/hex.js";
+import { hasUpgrade } from "../shared/upgrades.js";
 
 export const BOT_NAMES = [
   "Beep",
@@ -80,6 +81,24 @@ function scoreHex(game, p, h, phase) {
   if (phase === "bop") {
     const victim = game.playerById(game.phaseData.otherId);
     if (victim) s += distance(victim, h) * 7;
+  }
+
+  const terrain = game.hexAt(h.q, h.r)?.terrain;
+  if (
+    (phase === "move" || phase === "bounce") &&
+    terrain === "tree" &&
+    hasUpgrade(p, "treehopper") &&
+    !game.treeHopUsed
+  ) {
+    s += 16;
+  }
+  if (
+    (phase === "move" || phase === "bounce") &&
+    terrain === "water" &&
+    hasUpgrade(p, "slider") &&
+    !game.waterSlideUsed
+  ) {
+    s += 14;
   }
 
   s += 10 / (1 + nearestPrize(game, p, h));

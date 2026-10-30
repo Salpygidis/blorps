@@ -420,6 +420,42 @@ describe("core rules", () => {
     assert.equal(armor.events.find((e) => e.type === "bopSteal").stolen, 0);
   });
 
+  it("can go back to Bounce or Bop before a hex is picked", () => {
+    const g = twoPlayers({
+      slimes: [{ id: "s1", q: 2, r: 0, ownerId: "b", color: "#fff" }],
+    });
+    g.playerById("a").q = 1;
+    g.playerById("b").q = 2;
+    g.playerById("b").slime = 5;
+    g.beginTurn(0);
+    g.clickHex("a", 2, 0);
+    assert.equal(g.phase, "contact");
+    assert.equal(g.phaseData.bounceReason, "slime");
+
+    g.chooseContact("a", "bounce");
+    assert.equal(g.phase, "bounce");
+    assert.equal(g.uiHints().canBack, true);
+    assert.equal(g.uiHints().range, 2);
+    assert.equal(g.legalHexes().some((h) => h.q === 4 && h.r === 0), true);
+    assert.equal(g.chooseContact("a", "back").ok, true);
+    assert.equal(g.phase, "contact");
+    assert.equal(g.phaseData.bounceReason, "slime");
+    assert.equal(g.playerById("a").q, 2);
+    assert.equal(g.playerById("b").q, 2);
+
+    g.chooseContact("a", "bop");
+    assert.equal(g.phase, "bop");
+    assert.equal(g.uiHints().canBack, true);
+    assert.equal(g.uiHints().range, 2);
+    assert.equal(g.chooseContact("a", "back").ok, true);
+    assert.equal(g.phase, "contact");
+    assert.equal(g.playerById("b").q, 2);
+
+    g.phase = "bounce";
+    g.phaseData = { reason: "slime" };
+    assert.equal(g.chooseContact("a", "back").ok, false);
+  });
+
   it("announces a free bounce when you bounce off a player", () => {
     const g = twoPlayers();
     g.playerById("b").q = 1;
@@ -785,6 +821,7 @@ describe("core rules", () => {
     assert.equal(g.playerById("a").r, 1);
     assert.equal(g.phase, "bounce");
     assert.equal(g.events.find((e) => e.type === "freeBounce").reason, "water");
+    assert.equal(g.legalHexes().some((h) => h.q === 2 && h.r === 0), true);
     assert.equal(g.clickHex("a", 2, -1).ok, true);
     assert.equal(g.playerById("a").r, -1);
     assert.equal(g.phase, "move");
@@ -811,6 +848,64 @@ describe("core rules", () => {
     climb.movedThisTurn = true;
     climb.remainingMove = 1;
     assert.equal(climb.legalHexes().some((h) => h.q === 2 && h.r === 0), false);
+  });
+
+  it("lets a free bounce stop on a tree and bounce again", () => {
+    const plain = twoPlayers({
+      slimes: [{ id: "s1", q: 2, r: -1, ownerId: "b", color: "#fff" }],
+    });
+    plain.playerById("a").q = 2;
+    plain.playerById("a").r = 0;
+    plain.beginTurn(0);
+    plain.clickHex("a", 2, -1);
+    assert.equal(plain.phase, "bounce");
+    assert.equal(plain.legalHexes().some((h) => h.q === 3 && h.r === -1), false);
+    assert.equal(plain.clickHex("a", 3, -1).ok, false);
+
+    const g = twoPlayers({
+      slimes: [{ id: "s1", q: 2, r: -1, ownerId: "b", color: "#fff" }],
+    });
+    g.hexes["4,-1"].terrain = "water";
+    g.playerById("a").q = 2;
+    g.playerById("a").r = 0;
+    g.playerById("a").upgrades.push({ id: "treehopper" }, { id: "slider" });
+    g.beginTurn(0);
+    assert.equal(g.clickHex("a", 2, -1).ok, true);
+    assert.equal(g.phase, "bounce");
+    assert.equal(g.events.find((e) => e.type === "freeBounce").reason, "slime");
+    assert.equal(g.legalHexes().some((h) => h.q === 3 && h.r === -1), true);
+    assert.equal(g.legalHexes().some((h) => h.q === 4 && h.r === -1), false);
+    assert.equal(g.clickHex("a", 3, -1).ok, true);
+    assert.equal(g.playerById("a").q, 3);
+    assert.equal(g.playerById("a").r, -1);
+    assert.equal(g.phase, "bounce");
+    assert.equal(g.events.find((e) => e.type === "freeBounce").reason, "tree");
+    assert.equal(g.legalHexes().some((h) => h.q === 4 && h.r === -1), true);
+    assert.equal(g.clickHex("a", 4, -1).ok, true);
+    assert.equal(g.playerById("a").q, 4);
+    assert.equal(g.playerById("a").r, -1);
+    assert.equal(g.phase, "bounce");
+    assert.equal(g.events.find((e) => e.type === "freeBounce").reason, "water");
+    g.hexes["4,0"].terrain = "tree";
+    assert.equal(g.legalHexes().some((h) => h.q === 4 && h.r === 0), false);
+  });
+
+  it("Slip-n-Slide still bounces when a free bounce lands on water", () => {
+    const g = twoPlayers({
+      slimes: [{ id: "s1", q: 2, r: 0, ownerId: "b", color: "#fff" }],
+    });
+    g.playerById("a").q = 1;
+    g.playerById("a").r = 0;
+    g.playerById("a").upgrades.push({ id: "slider" });
+    g.beginTurn(0);
+    assert.equal(g.clickHex("a", 2, 0).ok, true);
+    assert.equal(g.phase, "bounce");
+    assert.equal(g.events.find((e) => e.type === "freeBounce").reason, "slime");
+    assert.equal(g.clickHex("a", 2, 1).ok, true);
+    assert.equal(g.playerById("a").q, 2);
+    assert.equal(g.playerById("a").r, 1);
+    assert.equal(g.phase, "bounce");
+    assert.equal(g.events.filter((e) => e.type === "freeBounce").at(-1).reason, "water");
   });
 
   it("Long Reach adds a move only while small", () => {
@@ -1114,5 +1209,23 @@ describe("bots", () => {
     g.playerById("b").slime = 1;
     g.playerById("b").basket = [];
     assert.deepEqual(chooseBotAction(g), { type: "contact", action: "bounce" });
+  });
+
+  it("bots step onto a tree or water when that card is ready", () => {
+    const tree = twoPlayers();
+    tree.playerById("a").isBot = true;
+    tree.playerById("a").q = 2;
+    tree.playerById("a").r = -1;
+    tree.playerById("a").upgrades.push({ id: "treehopper" });
+    tree.beginTurn(0);
+    assert.deepEqual(chooseBotAction(tree), { type: "hex", q: 3, r: -1 });
+
+    const water = twoPlayers();
+    water.playerById("a").isBot = true;
+    water.playerById("a").q = 2;
+    water.playerById("a").r = 0;
+    water.playerById("a").upgrades.push({ id: "slider" });
+    water.beginTurn(0);
+    assert.deepEqual(chooseBotAction(water), { type: "hex", q: 2, r: 1 });
   });
 });

@@ -47,7 +47,8 @@ describe("hex hover tip", () => {
       1,
       "a"
     );
-    assert.match(water[0].text, /Under 6 points, leaving costs 2/);
+    assert.match(water[0].text, /Under 6 points, climbing out costs 2/);
+    assert.match(water[0].text, /Slip-n-Slide/);
     const hill = describeHex(
       { hexes: [{ q: 2, r: 0, terrain: "open", elevation: 1 }] },
       2,

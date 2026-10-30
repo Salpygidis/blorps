@@ -9,13 +9,13 @@ export const UPGRADES = {
     id: "treehopper",
     name: "Treehopper",
     emoji: "🌳",
-    desc: "Once per turn, move onto a tree and treat it as a free bounce.",
+    desc: "Once per turn, land on a tree with a move or a free bounce and treat it as another free bounce.",
   },
   slider: {
     id: "slider",
     name: "Slip-n-Slide",
     emoji: "🌊",
-    desc: "Once per turn, move onto a water tile and treat it as a free bounce.",
+    desc: "Once per turn, land on a water tile with a move or a free bounce and treat it as another free bounce.",
   },
   superbounce: {
     id: "superbounce",
